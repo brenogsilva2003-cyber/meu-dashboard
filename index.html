@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Aviator</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="relogio-box" id="relogio-digital">00:00:00</div>
+    <div class="menu-title">NAVEGAÇÃO</div>
+    <button class="menu-btn active" onclick="switchTab('dashboard')">Dashboard</button>
+  </aside>
+
+  <!-- CONTEÚDO PRINCIPAL -->
+  <main class="main-content">
+    <div id="tab-dashboard" class="tab-content active">
+      
+      <!-- CARDS SUPERIORES DE VELAS ALTAS -->
+      <div class="top-summary-cards">
+        <div class="summary-card">
+          <div class="card-title"><span class="dot rosa-dot"></span> VELA ALTA (10X+)</div>
+          <div class="card-mult" id="card-10x">0.00x</div>
+          <div class="card-time-detail" id="ago-10x">--</div>
+        </div>
+        <div class="summary-card">
+          <div class="card-title"><span class="dot rosa-dot"></span> VELA ALTA (50X+)</div>
+          <div class="card-mult" id="card-50x">0.00x</div>
+          <div class="card-time-detail" id="ago-50x">--</div>
+        </div>
+        <div class="summary-card">
+          <div class="card-title"><span class="dot hot-dot"></span> VELA EXTREMA (100X+)</div>
+          <div class="card-mult" id="card-100x">0.00x</div>
+          <div class="card-time-detail" id="ago-100x">--</div>
+        </div>
+      </div>
+
+      <!-- CARDS DE MÉDIAS (NOVO) -->
+      <div class="cards-grid">
+        <div class="card">
+          <div class="section-title">MÉDIA DAS ROSAS</div>
+          <div class="card-value rosa-text" id="media-rosas">0.00x</div>
+          <div class="card-ago">Últimas 10 velas rosas</div>
+        </div>
+        <div class="card">
+          <div class="section-title">MÉDIA DAS ROXAS</div>
+          <div class="card-value" style="color: #9333ea;" id="media-roxas">0.00x</div>
+          <div class="card-ago">Últimas 15 velas roxas</div>
+        </div>
+        <div class="card">
+          <div class="section-title">MÉDIA DAS AZUIS</div>
+          <div class="card-value" style="color: #2563eb;" id="media-azuis">0.00x</div>
+          <div class="card-ago">Últimas 20 velas azuis</div>
+        </div>
+      </div>
+
+      <!-- PAINEL DE DISTRIBUIÇÃO E DADOS DA HORA -->
+      <div class="distribution-card">
+        <div class="dist-header">
+          <span>DISTRIBUIÇÃO DE VELAS DA ÚLTIMA HORA</span>
+          <span>TOTAL: <strong id="total-velas-hora" style="color: #ffb703;">0</strong></span>
+        </div>
+        <div class="dist-body">
+          <div class="chart-wrapper">
+            <canvas id="donutChart"></canvas>
+            <div class="chart-center-text" id="donut-center-val">0</div>
+          </div>
+          <div class="dist-legend">
+            <div class="legend-item">
+              <span class="legend-dot azul"></span> Azul (&lt; 2.00x)
+              <span class="legend-pct" id="pct-azul">0%</span>
+              <span class="legend-qty" id="qty-azul">0</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot roxa"></span> Roxa (&gt;= 2.00x)
+              <span class="legend-pct" id="pct-roxa">0%</span>
+              <span class="legend-qty" id="qty-roxa">0</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot rosa"></span> Rosa (&gt;= 10.00x)
+              <span class="legend-pct" id="pct-rosa">0%</span>
+              <span class="legend-qty" id="qty-rosa">0</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot hot"></span> Hot (&gt;= 100.00x)
+              <span class="legend-pct" id="pct-hot">0%</span>
+              <span class="legend-qty" id="qty-hot">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- GRÁFICO DE MINUTAGEM -->
+      <div style="margin-bottom: 25px;">
+        <div class="section-title">MINUTAGEM DAS ROSAS (ÚLTIMOS 11 MINUTOS)</div>
+        <div class="minutagem-container" id="minutagem-chart"></div>
+      </div>
+
+      <!-- HISTÓRICO DE RODADAS -->
+      <div>
+        <div class="section-title">HISTÓRICO DE RODADAS</div>
+        <div class="grid-rodadas" id="grid-rodadas"></div>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
