@@ -66,19 +66,23 @@ socket.onmessage = (event) => {
 };
 
 /**
- * Atualiza os elementos visuais do Card de Sinal em Tempo Real
+ * Atualiza os elementos visuais do Card de Sinal em Tempo Real (Incluindo Win Rate)
  */
 function atualizarPainelSinal(analise) {
   setVal('sinal-status', analise.sinal || '⚪ AGUARDANDO...');
   setVal('sinal-motivo', analise.motivo || 'Processando...');
   setVal('sinal-alvo', analise.alvo || 'N/A');
-  setVal('sinal-confianca', `Confiança: ${analise.confianca || '0%'}`);
+  
+  // Exibe a Confiança e a Taxa de Acerto calculada dinamicamente
+  const confiancaStr = analise.confianca || '0%';
+  const taxaAcertoStr = analise.taxaAcerto || '0.0%';
+  setVal('sinal-confianca', `Confiança: ${confiancaStr} | Win Rate: ${taxaAcertoStr}`);
 
   const statusEl = document.getElementById('sinal-status');
   if (statusEl && analise.sinal) {
-    if (analise.sinal.includes('ENTRAR')) {
+    if (analise.sinal.includes('ENTRAR') || analise.sinal.includes('FAVORÁVEL')) {
       statusEl.style.color = '#00ff88';
-    } else if (analise.sinal.includes('RECUAR') || analise.sinal.includes('ALERTA')) {
+    } else if (analise.sinal.includes('RECUAR') || analise.sinal.includes('ALERTA') || analise.sinal.includes('DEFESA') || analise.sinal.includes('CAUTELA') || analise.sinal.includes('ZONA')) {
       statusEl.style.color = '#ff3366';
     } else if (analise.sinal.includes('MODERADA')) {
       statusEl.style.color = '#ffcc00';
