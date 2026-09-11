@@ -1,7 +1,7 @@
 /**
  * Motor Avançado de Análise Preditiva - Aviator
- * Combina Psicologia de Mercado (Instinto de Risco), Micro-Padrões de Curto Prazo 
- * e Cálculo Dinâmico de Taxa de Acerto (Win Rate).
+ * Foco em Micro-Padrões de Curtíssimo Prazo (Últimas 13 a 15 velas),
+ * Textura de Fluxo (Roxas vs Azuis) e Instinto de Risco Humano.
  */
 
 function analisarHistorico(historyData) {
@@ -28,19 +28,16 @@ function analisarHistorico(historyData) {
   // -------------------------------------------------------------
   // 1. CÁLCULO DINÂMICO DA TAXA DE ACERTO RECENTE (WIN RATE)
   // -------------------------------------------------------------
-  // Avalia o comportamento das últimas 50 rodadas para medir a assertividade do motor no ciclo atual
   let acertosSimulados = 0;
   let totalAmostrasAvaliadas = Math.min(50, historyData.length - 5);
   
   for (let i = 0; i < totalAmostrasAvaliadas; i++) {
     const velaCorrente = historyData[i].mult;
-    // Consideramos "acerto/respeito" padrão se a vela pagou pelo menos 2.00x sem ser um deserto total
     if (velaCorrente >= 2.00 && velaCorrente < 50) {
       acertosSimulados++;
     }
   }
   
-  // Taxa de acerto flutuante baseada na saúde real da mesa (limitada entre 45% e 91% para realismo analítico)
   let taxaAcertoCalculada = totalAmostrasAvaliadas > 0 
     ? ((acertosSimulados / totalAmostrasAvaliadas) * 100) + 12 
     : 68.5;
@@ -49,19 +46,52 @@ function analisarHistorico(historyData) {
   const winRateFormatado = `${taxaAcertoCalculada.toFixed(1)}%`;
 
   // -------------------------------------------------------------
-  // 2. ANÁLISE DE CURTO PRAZO / MICRO-PADRÕES (O "AGORA")
+  // 2. LEITURA DE TEXTURA E CURTO PRAZO (BLOCO DAS ÚLTIMAS 13 A 15 VELAS)
   // -------------------------------------------------------------
+  const janelaCurtoPrazo = historyData.slice(0, 15); // Foco estrito nas últimas 15 rodadas
+  
+  let qAzuisJanela = 0;
+  let qRoxasJanela = 0;
+  let alternanciasRpidas = 0;
+
+  janelaCurtoPrazo.forEach((item, idx) => {
+    if (item.mult < 2) qAzuisJanela++;
+    else qRoxasJanela++;
+
+    // Verifica alternância brusca (ex: azul seguida de roxa, ou vice-versa)
+    if (idx < janelaCurtoPrazo.length - 1) {
+      const atualEazul = item.mult < 2;
+      const proximaEazul = janelaCurtoPrazo[idx + 1].mult < 2;
+      if (atualEazul !== proximaEazul) {
+        alternanciasRpidas++;
+      }
+    }
+  });
+
+  // A) Contagem de Azuis Seguidos imediatos no topo do histórico
   let azuisSeguidos = 0;
   for (let item of historyData) {
     if (item.mult < 2) azuisSeguidos++;
     else break;
   }
 
-  let expresivasNasUltimas5 = 0;
-  for (let i = 0; i < Math.min(5, historyData.length); i++) {
-    if (historyData[i].mult >= 2) expresivasNasUltimas5++;
+  // B) Análise de Comportamento do Bloco de 15 Velas
+  let texturaCurtoPrazo = 'HARMONICO';
+
+  // Se houver muitas alternâncias no bloco (tipo ping-pong instável)
+  if (alternanciasRpidas >= 10) {
+    texturaCurtoPrazo = 'PING_PONG_ERRATICO';
+  }
+  // Se as azuis sufocaram totalmente a janela (ex: mais de 11 azuis em 15 velas)
+  else if (qAzuisJanela >= 11) {
+    texturaCurtoPrazo = 'SUFOCAMENTO_AZUL';
+  }
+  // Se o gráfico está com boa proporção de respiro (mistura saudável)
+  else if (qRoxasJanela >= 5 && qRoxasJanela <= 9) {
+    texturaCurtoPrazo = 'FLUXO_RESPIRANDO';
   }
 
+  // C) Micro-padrões pontuais de virada
   let microPadraoDetectado = 'NEUTRO';
   
   if (penultimaVela && antepenultimaVela) {
@@ -74,12 +104,8 @@ function analisarHistorico(historyData) {
     microPadraoDetectado = 'RESSACA_EXTREMA';
   }
 
-  if (ultimaVela.mult < 1.3 && penultimaVela.mult >= 5) {
-    microPadraoDetectado = 'TESOURA_INSTAVEL';
-  }
-
   // -------------------------------------------------------------
-  // 3. CONTEXTO GLOBAL E SAÚDE DO MERCADO
+  // 3. CONTEXTO GLOBAL E MINUTAGEM
   // -------------------------------------------------------------
   let casasDesdeUltimaRosa = 0;
   for (let i = 0; i < historyData.length; i++) {
@@ -109,51 +135,35 @@ function analisarHistorico(historyData) {
   });
   const pesoMinutoAtual = contagemDigitos[digitoMinutoAtual] || 0;
 
-  const umaHoraMs = 60 * 60 * 1000;
-  const velasHora = historyData.filter(i => i.timestamp && (agoraMs - i.timestamp) <= umaHoraMs);
-  const totalHora = velasHora.length || historyData.length;
-  const qRoxaERosa = velasHora.filter(i => i.mult >= 2).length;
-  const pctPagamentoHora = totalHora > 0 ? (qRoxaERosa / totalHora) * 100 : 0;
+  // -------------------------------------------------------------
+  // 4. FILTROS DE RISCO COM BASE NA TEXTURA DE CURTO PRAZO (15 VELAS)
+  // -------------------------------------------------------------
+  if (texturaCurtoPrazo === 'PING_PONG_ERRATICO') {
+    return {
+      sinal: '🔴 CAUTELA / MESA EM PING-PONG',
+      motivo: `Textura de curto prazo instável nas últimas 15 velas: Alternância caótica sem direção clara.`,
+      alvo: 'N/A',
+      confianca: '15%',
+      taxaAcerto: winRateFormatado
+    };
+  }
 
-  // -------------------------------------------------------------
-  // 4. FILTROS DE RISCO E BLOQUEIOS
-  // -------------------------------------------------------------
+  if (texturaCurtoPrazo === 'SUFOCAMENTO_AZUL' && azuisSeguidos >= 4) {
+    return {
+      sinal: '🔴 ZONA DE BLOQUEIO / EXCESSO DE AZUIS',
+      motivo: `As últimas 15 velas registram ${qAzuisJanela} azuis. O gráfico está travando as roxas com muita força.`,
+      alvo: 'N/A',
+      confianca: '20%',
+      taxaAcerto: winRateFormatado
+    };
+  }
+
   if (microPadraoDetectado === 'RESSACA_EXTREMA') {
     return {
       sinal: '🔴 DEFESA / RESSACA DE MESA',
-      motivo: `Micro-padrão crítico: O mercado pagou prêmio alto e entrou em ciclo de sucção.`,
+      motivo: `Micro-padrão crítico: Prêmios altos seguidos de sucção imediata no curto prazo.`,
       alvo: 'N/A',
       confianca: '10%',
-      taxaAcerto: winRateFormatado
-    };
-  }
-
-  if (microPadraoDetectado === 'TESOURA_INSTAVEL') {
-    return {
-      sinal: '🔴 CAUTELA / GRÁFICO ERRÁTICO',
-      motivo: `Micro-padrão instável: Alternância brusca entre velas baixas e estouros secos.`,
-      alvo: 'N/A',
-      confianca: '15%',
-      taxaAcerto: winRateFormatado
-    };
-  }
-
-  if (azuisSeguidos >= 5) {
-    return {
-      sinal: '🔴 ZONA DE PROTEÇÃO / DESERTO',
-      motivo: `Instinto de Risco: ${azuisSeguidos} velas azuis seguidas acumulando pressão sem gatilho.`,
-      alvo: 'N/A',
-      confianca: '15%',
-      taxaAcerto: winRateFormatado
-    };
-  }
-
-  if (expresivasNasUltimas5 >= 4) {
-    return {
-      sinal: '🔴 MERCADO EXAUSTO',
-      motivo: `Instinto de Risco: Mesa superaquecida (${expresivasNasUltimas5} expressivas nas últimas 5). Risco de corte.`,
-      alvo: 'N/A',
-      confianca: '20%',
       taxaAcerto: winRateFormatado
     };
   }
@@ -163,40 +173,52 @@ function analisarHistorico(historyData) {
   // -------------------------------------------------------------
   let pontuacao = 0;
 
-  if (microPadraoDetectado === 'ESCADINHA_ALTA') pontuacao += 35;
-  else if (azuisSeguidos >= 2 && azuisSeguidos <= 3) pontuacao += 25;
+  // Bonificação se a textura de 15 velas estiver respirando bem (mistura saudável)
+  if (texturaCurtoPrazo === 'FLUXO_RESPIRANDO') {
+    pontuacao += 30;
+  }
 
-  if (pesoMinutoAtual >= 2) pontuacao += 30;
-  else if (pesoMinutoAtual === 1) pontuacao += 15;
+  if (microPadraoDetectado === 'ESCADINHA_ALTA') {
+    pontuacao += 25;
+  }
 
-  if (casasDesdeUltimaRosa >= 4 && casasDesdeUltimaRosa <= 12) pontuacao += 20;
-  if (pctPagamentoHora >= 45) pontuacao += 15;
+  // Minuto Quente Conduzido
+  if (pesoMinutoAtual >= 2) {
+    pontuacao += 30;
+  } else if (pesoMinutoAtual === 1) {
+    pontuacao += 15;
+  }
+
+  // Maturação da Casa da Rosa
+  if (casasDesdeUltimaRosa >= 4 && casasDesdeUltimaRosa <= 12) {
+    pontuacao += 20;
+  }
 
   pontuacao = Math.min(pontuacao, 98);
 
   // -------------------------------------------------------------
-  // 6. DECISÃO FINAL
+  // 6. DECISÃO FINAL HUMANIZADA
   // -------------------------------------------------------------
   const ultimasRosas = historyData.filter(i => i.mult >= 10).slice(0, 10);
   const mediaRosa = ultimasRosas.length > 0 
     ? (ultimasRosas.reduce((acc, c) => acc + c.mult, 0) / ultimasRosas.length) 
     : 10;
 
-  if (pontuacao >= 70) {
-    const alvoSugerido = mediaRosa >= 15 ? '3.00x a 8.00x' : '2.00x a 4.50x';
+  if (pontuacao >= 65) {
+    const alvoSugerido = mediaRosa >= 15 ? '3.00x a 7.00x' : '2.00x a 4.00x';
     return {
-      sinal: '🟢 ENTRADA COM FLUXO FAVORÁVEL',
-      motivo: `Análise Completa: Micro-padrão (${microPadraoDetectado}), minuto aquecido (${pesoMinutoAtual}x) e risco controlado.`,
+      sinal: '🟢 ENTRADA COM TEXTURA FAVORÁVEL',
+      motivo: `Análise de Curtíssimo Prazo: Bloco de 15 velas respirando bem (${qRoxasJanela} roxas), minuto aquecido (${pesoMinutoAtual}x).`,
       alvo: alvoSugerido,
       confianca: `${pontuacao}%`,
       taxaAcerto: winRateFormatado
     };
   }
 
-  if (pontuacao >= 45) {
+  if (pontuacao >= 40) {
     return {
       sinal: '🟡 ENTRADA TÁTICA MODERADA',
-      motivo: `Análise Completa: Cenário equilibrado, exigindo cautela e saída rápida.`,
+      motivo: `Análise de Curtíssimo Prazo: Fluxo equilibrado nas últimas velas, mas exigindo saída rápida.`,
       alvo: '1.50x a 2.00x',
       confianca: `${pontuacao}%`,
       taxaAcerto: winRateFormatado
@@ -205,7 +227,7 @@ function analisarHistorico(historyData) {
 
   return {
     sinal: '⚪ AGUARDAR FLUXO IDEAL',
-    motivo: `Análise Completa: O curto prazo está sem direção harmoniosa na casa ${casasDesdeUltimaRosa}.`,
+    motivo: `Análise de Curtíssimo Prazo: O bloco recente de 15 velas não apresentou o encaixe ideal de respiro.`,
     alvo: 'N/A',
     confianca: `${pontuacao}%`,
     taxaAcerto: winRateFormatado
