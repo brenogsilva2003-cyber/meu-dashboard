@@ -14,17 +14,30 @@ setInterval(() => {
   atualizarTemposDecorridos();
 }, 1000);
 
-// Conexão WebSocket
+// Conexão WebSocket Segura e Dinâmica para Local ou Render
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const wsHost = window.location.host || 'localhost:3000';
+const wsHost = window.location.host;
 const socket = new WebSocket(`${wsProtocol}//${wsHost}`);
+
 socket.onopen = () => {
-  console.log('Conectado ao servidor WebSocket local.');
+  console.log('Conectado ao servidor WebSocket com sucesso.');
+};
+
+socket.onclose = () => {
+  console.warn('Conexão WebSocket perdida. Tentando reconectar em 3s...');
+  setTimeout(() => {
+    window.location.reload();
+  }, 3000);
 };
 
 socket.onmessage = (event) => {
   try {
     const mensagem = JSON.parse(event.data);
+
+    // 1. Atualiza o Card de Recomendação/Sinal (se fornecido)
+    if (mensagem.analise) {
+      atualizarPainelSinal(mensagem.analise);
+    }
 
     if (mensagem.tipo === 'HISTORICO_INICIAL') {
       historyData = mensagem.dados || [];
@@ -47,6 +60,27 @@ socket.onmessage = (event) => {
     console.error('Erro ao ler pacote:', e);
   }
 };
+
+/**
+ * Atualiza os elementos visuais do Card de Sinal de Inteligência
+ */
+function atualizarPainelSinal(analise) {
+  setVal('sinal-status', analise.sinal || '⚪ AGUARDANDO...');
+  setVal('sinal-motivo', analise.motivo || 'Processando...');
+  setVal('sinal-alvo', analise.alvo || 'N/A');
+  setVal('sinal-confianca', `Confiança: ${analise.confianca || '0%'}`);
+
+  const statusEl = document.getElementById('sinal-status');
+  if (statusEl && analise.sinal) {
+    if (analise.sinal.includes('ENTRAR')) {
+      statusEl.style.color = '#00ff88';
+    } else if (analise.sinal.includes('RECUAR')) {
+      statusEl.style.color = '#ff3366';
+    } else {
+      statusEl.style.color = '#ffffff';
+    }
+  }
+}
 
 function switchTab(tabName) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -264,9 +298,8 @@ function renderizarMinutagem20Minutos() {
   if (!chart) return;
 
   const agora = Date.now();
-  const vinteMinutosMs = 20 * 60 * 1000; // 20 minutos em milissegundos
+  const vinteMinutosMs = 20 * 60 * 1000;
 
-  // Filtra cada vela rosa para mantê-la apenas se ocorreu nos últimos 20 minutos
   const rosasValidas = historyData.filter(i => {
     const eRosa = i.mult >= 10;
     const dentroDos20Min = i.timestamp ? (agora - i.timestamp) <= vinteMinutosMs : false;

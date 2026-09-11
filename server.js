@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { WebSocketServer } = require('ws');
+const { analisarMercado } = require('./analyzer'); // Importa a inteligência do bot
 
 const app = express();
 const server = http.createServer(app);
@@ -32,18 +33,22 @@ wss.on('connection', (ws) => {
         timestamp: data.timestamp || Date.now()
       };
 
-      // Guarda a nova rodada na memória do servidor
+      // 1. Guarda a nova rodada na memória do servidor
       historicoServidor.unshift(pacote);
       if (historicoServidor.length > 500) historicoServidor.pop();
 
-      console.log('[Servidor] Transmitindo:', JSON.stringify(pacote));
+      // 2. Executa a análise de inteligência para o Aviator
+      const analise = analisarMercado(pacote);
 
-      // Transmite a nova rodada em tempo real para todas as abas abertas
+      console.log('[Servidor] Transmitindo rodada e análise:', JSON.stringify({ pacote, analise }));
+
+      // 3. Transmite a nova rodada + sinal de entrada para todas as abas abertas
       wss.clients.forEach((client) => {
         if (client.readyState === 1) { // 1 = WebSocket.OPEN
           client.send(JSON.stringify({
             tipo: 'NOVA_RODADA',
-            dados: pacote
+            dados: pacote,
+            analise: analise
           }));
         }
       });
@@ -53,7 +58,8 @@ wss.on('connection', (ws) => {
   });
 });
 
-const PORT = 3000;
-server.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`);
+// O Render injeta a porta correta na variável process.env.PORT
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
 });

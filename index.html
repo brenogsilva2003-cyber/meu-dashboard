@@ -20,6 +20,26 @@
   <main class="main-content">
     <div id="tab-dashboard" class="tab-content active">
       
+      <!-- PAINEL DE INTELIGÊNCIA E RECOMENDAÇÃO (SINAL) -->
+      <div id="painel-sinal" style="background: #181b2a; border: 1px solid #2b2f4a; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2b2f4a; padding-bottom: 10px; margin-bottom: 15px;">
+          <span style="font-size: 0.85rem; font-weight: bold; color: #8a8d9b; letter-spacing: 1px;">SINAL EM TEMPO REAL</span>
+          <span id="sinal-confianca" style="background: #2b2f4a; color: #00f0ff; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: bold;">Confiança: 0%</span>
+        </div>
+        
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+          <div>
+            <h1 id="sinal-status" style="margin: 0; font-size: 1.8rem; color: #ffffff;">⚪ AGUARDANDO VELA...</h1>
+            <p id="sinal-motivo" style="margin: 5px 0 0 0; color: #a0a5ba; font-size: 0.95rem;">Aguardando início do processamento do analisador...</p>
+          </div>
+          
+          <div style="text-align: right; background: #0f111a; padding: 10px 18px; border-radius: 8px; border: 1px solid #23273e;">
+            <div style="font-size: 0.75rem; color: #787c91; text-transform: uppercase; font-weight: bold;">Alvo Sugerido</div>
+            <div id="sinal-alvo" style="font-size: 1.4rem; font-weight: bold; color: #00ff88; margin-top: 2px;">N/A</div>
+          </div>
+        </div>
+      </div>
+
       <!-- CARDS SUPERIORES DE VELAS ALTAS -->
       <div class="top-summary-cards">
         <div class="summary-card">
@@ -39,7 +59,7 @@
         </div>
       </div>
 
-      <!-- CARDS DE MÉDIAS (NOVO) -->
+      <!-- CARDS DE MÉDIAS -->
       <div class="cards-grid">
         <div class="card">
           <div class="section-title">MÉDIA DAS ROSAS</div>
