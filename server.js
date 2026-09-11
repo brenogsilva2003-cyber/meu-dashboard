@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { WebSocketServer } = require('ws');
-const { analisarMercado } = require('./analyzer'); // Importa a inteligência do bot
+const { analisarHistorico } = require('./analyzer'); // Nome correto da função
 
 const app = express();
 const server = http.createServer(app);
@@ -37,12 +37,12 @@ wss.on('connection', (ws) => {
       historicoServidor.unshift(pacote);
       if (historicoServidor.length > 500) historicoServidor.pop();
 
-      // 2. Executa a análise de inteligência para o Aviator
-      const analise = analisarMercado(pacote);
+      // 2. Executa a análise passando o histórico completo para a inteligência
+      const analise = analisarHistorico(historicoServidor);
 
-      console.log('[Servidor] Transmitindo rodada e análise:', JSON.stringify({ pacote, analise }));
+      console.log('[Servidor] Transmitindo rodada e análise:', pacote.mult);
 
-      // 3. Transmite a nova rodada + sinal de entrada para todas as abas abertas
+      // 3. Transmite a nova rodada + sinal atualizado para todas as abas abertas
       wss.clients.forEach((client) => {
         if (client.readyState === 1) { // 1 = WebSocket.OPEN
           client.send(JSON.stringify({
