@@ -1,103 +1,159 @@
-// Memória local para guardar as últimas velas recebidas
-let historicoVelas = [];
-
-const CONFIG = {
-  VELA_AZUL_MAX: 1.99,   // Vela baixa (< 2.00x)
-  VELA_ROXA_MIN: 2.00,   // Vela média/boa (>= 2.00x)
-  VELA_ROSA_MIN: 10.00,  // Vela alta (>= 10.00x)
-  LIMITE_HISTORICO: 50   // Quantidade de velas mantidas para cálculo
-};
-
 /**
- * Função principal: chamada sempre que o bot.js envia uma nova vela ao servidor
+ * Motor Avançado de Análise Preditiva para Aviator
+ * Avalia confluências de minutagem, intervalos de casas, saúde do mercado e padrões.
  */
-function analisarMercado(novaVela) {
-  // novaVela = { mult: 2.35, time: "12:15:30", timestamp: 1726067730000 }
-  historicoVelas.unshift(novaVela);
 
-  if (historicoVelas.length > CONFIG.LIMITE_HISTORICO) {
-    historicoVelas.pop();
-  }
-
-  // Precisa de pelo menos 5 velas para gerar análises consistentes
-  if (historicoVelas.length < 5) {
+function analisarHistorico(historyData) {
+  // Padrão de saída para poucas rodadas
+  if (!historyData || historyData.length < 15) {
     return {
-      sinal: '⚪ AGUARDANDO_DADOS',
-      motivo: 'Acumulando velas para análise inicial...',
+      sinal: '⚪ AGUARDAR',
+      motivo: 'Aguardando mais dados históricos para análise (mínimo 15 rodadas)...',
       alvo: 'N/A',
       confianca: '0%'
     };
   }
 
-  return processarEstrategia();
-}
+  const ultimaVela = historyData[0];
+  const agora = new Date();
+  const minutoAtualStr = agora.getMinutes().toString();
+  const digitoMinutoAtual = parseInt(minutoAtualStr.slice(-1)); // Último dígito do minuto atual (0-9)
 
-/**
- * Motor de Análise: Minutagem, Intervalos e Contagem de Casas
- */
-function processarEstrategia() {
-  const ultima = historicoVelas[0];
-  const penultima = historicoVelas[1];
-
-  // 1. CONTAGEM DE CASAS: Quantas velas se passaram desde a última vela boa (>= 2.00x)
-  let casasSemRoxa = 0;
-  for (let i = 0; i < historicoVelas.length; i++) {
-    if (historicoVelas[i].mult >= CONFIG.VELA_ROXA_MIN) {
-      casasSemRoxa = i;
+  // -------------------------------------------------------------
+  // 1. ANÁLISE DE INTERVALO (CASAS DESDE A ÚLTIMA ROSA)
+  // -------------------------------------------------------------
+  let casasDesdeUltimaRosa = 0;
+  for (let i = 0; i < historyData.length; i++) {
+    if (historyData[i].mult >= 10) {
+      casasDesdeUltimaRosa = i;
       break;
     }
   }
 
-  // 2. TEMPO/INTERVALO: Intervalo em segundos entre as duas últimas velas capturadas
-  const intervaloSegundos = Math.round((ultima.timestamp - penultima.timestamp) / 1000);
+  // -------------------------------------------------------------
+  // 2. FREQUÊNCIA DE MINUTAGEM NOS ÚLTIMOS 20 MINUTOS
+  // -------------------------------------------------------------
+  const vinteMinutosMs = 20 * 60 * 1000;
+  const agoraMs = agora.getTime();
 
-  // 3. MINUTAGEM: Avalia a minutagem exata do momento
-  const minutoAtual = new Date().getMinutes();
-  const minutoPar = minutoAtual % 2 === 0;
+  const rosasRecentes = historyData.filter(item => {
+    const eRosa = item.mult >= 10;
+    const dentroJanela = item.timestamp ? (agoraMs - item.timestamp) <= vinteMinutosMs : true;
+    return eRosa && dentroJanela;
+  });
 
-  // --- REGRAS DE RECOMENDAÇÃO ---
+  const contagemDigitos = Array(10).fill(0);
+  rosasRecentes.forEach(item => {
+    if (item.time) {
+      const min = item.time.split(':')[1];
+      if (min) {
+        const digito = parseInt(min.slice(-1));
+        contagemDigitos[digito]++;
+      }
+    }
+  });
 
-  // REGRA 1: FILTRO DE SEGURANÇA (Crash Baixo Frequente)
-  if (ultima.mult < 1.20) {
+  const pesoMinutoAtual = contagemDigitos[digitoMinutoAtual] || 0;
+
+  // -------------------------------------------------------------
+  // 3. SAÚDE DO MERCADO DA ÚLTIMA HORA (PORCENTAGENS)
+  // -------------------------------------------------------------
+  const umaHoraMs = 60 * 60 * 1000;
+  const velasHora = historyData.filter(i => i.timestamp && (agoraMs - i.timestamp) <= umaHoraMs);
+  const totalHora = velasHora.length || historyData.length;
+
+  const qRoxaERosa = velasHora.filter(i => i.mult >= 2).length;
+  const pctPagamentoHora = totalHora > 0 ? (qRoxaERosa / totalHora) * 100 : 0;
+
+  // Sequência de Azuis Atual
+  let azuisSeguidos = 0;
+  for (let item of historyData) {
+    if (item.mult < 2) azuisSeguidos++;
+    else break;
+  }
+
+  // -------------------------------------------------------------
+  // 4. SISTEMA DE PONTUAÇÃO MULTICRITÉRIO (0 a 100)
+  // -------------------------------------------------------------
+  let pontuacao = 0;
+
+  // A) Pontos por Minuto Quente (Até 35 pontos)
+  if (pesoMinutoAtual >= 2) pontuacao += 35;
+  else if (pesoMinutoAtual === 1) pontuacao += 20;
+
+  // B) Pontos por Intervalo de Casas (Até 30 pontos)
+  if (casasDesdeUltimaRosa >= 3 && casasDesdeUltimaRosa <= 10) {
+    pontuacao += 30; // ZONA IDEAL DE REPETIÇÃO
+  } else if (casasDesdeUltimaRosa > 10 && casasDesdeUltimaRosa <= 18) {
+    pontuacao += 20; // MATURAÇÃO DE ROSA
+  } else if (casasDesdeUltimaRosa === 1) {
+    pontuacao += 15; // POSSÍVEL ROSA DUPLA
+  }
+
+  // C) Pontos por Saúde do Mercado (Até 25 pontos)
+  if (pctPagamentoHora >= 55) pontuacao += 25;
+  else if (pctPagamentoHora >= 45) pontuacao += 15;
+
+  // D) Fator de Tendência Atual (Até 10 pontos)
+  if (ultimaVela.mult >= 2 && ultimaVela.mult < 10) pontuacao += 10;
+
+  // -------------------------------------------------------------
+  // 5. REGRAS DE RECUO E FILTROS DE SEGURANÇA
+  // -------------------------------------------------------------
+  // Se houver 3 ou mais azuis seguidos (Mercado em recolhimento)
+  if (azuisSeguidos >= 3) {
     return {
-      sinal: '🔴 RECUAR',
-      motivo: `Última vela muito baixa (${ultima.mult}x). Risco de sequência negativa.`,
+      sinal: '🔴 RECUAR / ALERTA',
+      motivo: `Sequência de ${azuisSeguidos} azuis seguidos. Mercado em fase de recolhimento.`,
       alvo: 'N/A',
-      confianca: '90%',
-      metricas: { casasSemRoxa, intervaloSegundos, minutoAtual }
+      confianca: '15%'
     };
   }
 
-  // REGRA 2: PADRÃO DE RECUPERAÇÃO (Gatilho de 3 a 5 casas sem roxa + Minuto favorável)
-  if (casasSemRoxa >= 3 && casasSemRoxa <= 5 && minutoPar) {
+  // Se o mercado da última hora estiver muito abaixo do normal (< 38% pagando)
+  if (pctPagamentoHora < 38) {
     return {
-      sinal: '🟢 ENTRAR (ALTA CONFIRMAÇÃO)',
-      motivo: `Padrão de recuperação ativado em ${casasSemRoxa} casas + Minuto par (${minutoAtual}m).`,
-      alvo: '1.80x - 2.10x',
-      confianca: '85%',
-      metricas: { casasSemRoxa, intervaloSegundos, minutoAtual }
+      sinal: '🔴 RECUAR / MERCADO FRIO',
+      motivo: `Apenas ${pctPagamentoHora.toFixed(0)}% de velas roxas/rosas na última hora.`,
+      alvo: 'N/A',
+      confianca: '20%'
     };
   }
 
-  // REGRA 3: TENDÊNCIA DE SURF (Duas velas roxas/rosas seguidas)
-  if (ultima.mult >= CONFIG.VELA_ROXA_MIN && penultima.mult >= CONFIG.VELA_ROXA_MIN) {
+  // -------------------------------------------------------------
+  // 6. GERAÇÃO DO SINAL E TARGET SUGERIDO
+  // -------------------------------------------------------------
+  // Cálculo de Média Móvel para Sugestão de Alvo
+  const ultimasRosas = historyData.filter(i => i.mult >= 10).slice(0, 10);
+  const mediaRosa = ultimasRosas.length > 0 
+    ? (ultimasRosas.reduce((acc, c) => acc + c.mult, 0) / ultimasRosas.length) 
+    : 10;
+
+  if (pontuacao >= 70) {
+    const alvoSugerido = mediaRosa >= 15 ? '3.00x a 10.00x' : '2.00x a 5.00x';
     return {
-      sinal: '🟡 ENTRAR COM CAUTELA (SURF)',
-      motivo: 'Sequência de velas de ganho ativada.',
-      alvo: '1.50x - 1.80x',
-      confianca: '65%',
-      metricas: { casasSemRoxa, intervaloSegundos, minutoAtual }
+      sinal: '🟢 ENTRAR CONFIRMADO',
+      motivo: `Confluência forte! Minuto ${digitoMinutoAtual} aquecido e casa ${casasDesdeUltimaRosa} favorável.`,
+      alvo: alvoSugerido,
+      confianca: `${Math.min(pontuacao, 95)}%`
+    };
+  } 
+  
+  if (pontuacao >= 45) {
+    return {
+      sinal: '🟡 ENTRADA MODERADA',
+      motivo: `Padrão moderado. Ponderação na casa ${casasDesdeUltimaRosa}. Busque proteção em 2.00x.`,
+      alvo: '1.50x a 2.00x',
+      confianca: `${pontuacao}%`
     };
   }
 
-  // REGRA 4: AGUARDAR (Mercado Neutro)
   return {
     sinal: '⚪ AGUARDAR / NEUTRO',
-    motivo: 'Sem confirmação clara de padrão de minutagem ou contagem.',
+    motivo: `Aguardando melhor momento (Casa ${casasDesdeUltimaRosa} sem padrão claro de minutagem).`,
     alvo: 'N/A',
-    confianca: '50%',
-    metricas: { casasSemRoxa, intervaloSegundos, minutoAtual }
+    confianca: `${pontuacao}%`
   };
 }
 
-module.exports = { analisarMercado };
+module.exports = { analisarHistorico };
