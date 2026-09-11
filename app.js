@@ -9,7 +9,7 @@ setInterval(() => {
     relogioEl.innerText = agora.toTimeString().split(' ')[0];
   }
   
-  // Atualiza em tempo real a minutagem de 20 min e os tempos decorridos
+  // Atualiza em tempo real a minutagem e os tempos decorridos
   renderizarMinutagem20Minutos();
   atualizarTemposDecorridos();
 }, 1000);
@@ -34,7 +34,7 @@ socket.onmessage = (event) => {
   try {
     const mensagem = JSON.parse(event.data);
 
-    // 1. Atualiza o Card de Recomendação/Sinal (se fornecido)
+    // 1. Atualiza o Card de Recomendação/Sinal em tempo real
     if (mensagem.analise) {
       atualizarPainelSinal(mensagem.analise);
     }
@@ -49,20 +49,24 @@ socket.onmessage = (event) => {
       const novaRodada = mensagem.dados;
       if (novaRodada && novaRodada.mult) {
         const ultima = historyData[0];
+        
+        // Evita duplicatas sequenciais e força a renderização automática
         if (!ultima || ultima.mult !== novaRodada.mult || ultima.time !== novaRodada.time) {
           historyData.unshift(novaRodada);
           if (historyData.length > 500) historyData.pop();
+          
+          // RE-RENDERIZAÇÃO FORÇADA
           renderizarTudo();
         }
       }
     }
   } catch (e) {
-    console.error('Erro ao ler pacote:', e);
+    console.error('Erro ao processar pacote WebSocket:', e);
   }
 };
 
 /**
- * Atualiza os elementos visuais do Card de Sinal de Inteligência
+ * Atualiza os elementos visuais do Card de Sinal em Tempo Real
  */
 function atualizarPainelSinal(analise) {
   setVal('sinal-status', analise.sinal || '⚪ AGUARDANDO...');
@@ -74,8 +78,10 @@ function atualizarPainelSinal(analise) {
   if (statusEl && analise.sinal) {
     if (analise.sinal.includes('ENTRAR')) {
       statusEl.style.color = '#00ff88';
-    } else if (analise.sinal.includes('RECUAR')) {
+    } else if (analise.sinal.includes('RECUAR') || analise.sinal.includes('ALERTA')) {
       statusEl.style.color = '#ff3366';
+    } else if (analise.sinal.includes('MODERADA')) {
+      statusEl.style.color = '#ffcc00';
     } else {
       statusEl.style.color = '#ffffff';
     }
@@ -110,7 +116,7 @@ function calcMinutosAtras(timestamp) {
     const restMins = mins % 60;
     return `${hrs}h ${restMins}min atrás`;
   }
-  return `${mins} minutos atrás`;
+  return `${mins} min atrás`;
 }
 
 function renderizarTudo() {
