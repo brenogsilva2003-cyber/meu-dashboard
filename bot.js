@@ -1,13 +1,31 @@
 const puppeteer = require('puppeteer');
 const WebSocket = require('ws');
 
-const URL_DO_JOGO = 'https://apostatudo.bet.br/games/banana/aviaozinho';
-let ws = new WebSocket('ws://localhost:3000');
+const URL_DO_JOGO = 'https://bingo.bet.br/play/cassino'; // URL pública do seu servidor no Render com protocolo WSS (seguro)
+const RENDER_WS_URL = 'wss://meu-dashboard-0lly.onrender.com';
 
-ws.on('open', () => {
-  console.log('[Bot] Conectado ao servidor WebSocket.');
-  iniciarBot();
-});
+let ws;
+
+function conectarWebSocket() {
+  ws = new WebSocket(RENDER_WS_URL);
+
+  ws.on('open', () => {
+    console.log('[Bot] Conectado com sucesso ao servidor no Render!');
+  });
+
+  ws.on('error', (err) => {
+    console.error('[Bot] Erro na conexão WebSocket:', err.message);
+  });
+
+  ws.on('close', () => {
+    console.warn('[Bot] Conexão caiu. Tentando reconectar em 3 segundos...');
+    setTimeout(conectarWebSocket, 3000);
+  });
+}
+
+// Inicia a conexão do WebSocket
+conectarWebSocket();
+iniciarBot();
 
 async function iniciarBot() {
   const browser = await puppeteer.launch({
@@ -70,12 +88,15 @@ function enviarVela(mult) {
 
   const dadosRodada = {
     mult: mult,
-    time: tempoComSegundos
+    time: tempoComSegundos,
+    timestamp: agora.getTime()
   };
 
   console.log(`[Bot] 🚀 VELA CAPTURADA: ${dadosRodada.mult}x às ${dadosRodada.time}`);
 
-  if (ws.readyState === WebSocket.OPEN) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(dadosRodada));
+  } else {
+    console.warn('[Bot] WebSocket desconectado. Não foi possível enviar a vela no momento.');
   }
 }
