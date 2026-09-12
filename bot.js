@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer');
 const WebSocket = require('ws');
 
-const URL_DO_JOGO = 'https://bingo.bet.br/play/cassino'; 
+const URL_DO_JOGO = 'https://belodi.aviatorpro.io/'; 
 const RENDER_WS_URL = 'wss://meu-dashboard-0lly.onrender.com';
 
 let ws;
@@ -23,7 +23,6 @@ function conectarWebSocket() {
   });
 }
 
-// Inicia a conexão do WebSocket
 conectarWebSocket();
 iniciarBot();
 
@@ -36,14 +35,13 @@ async function iniciarBot() {
 
   const page = await browser.newPage();
 
-  // Monitoramento de requisições de rede otimizado para o provedor do Aviator
+  // Intercepta requisições de rede para pegar o resultado oficial do crash
   page.on('response', async (response) => {
     try {
       const url = response.url();
-      if (url.includes('history') || url.includes('rounds') || url.includes('result') || url.includes('payouts')) {
+      if (url.includes('history') || url.includes('rounds') || url.includes('results') || url.includes('payouts') || url.includes('stat')) {
         const text = await response.text();
-        const matches = text.match(/"(multiplier|mult|crash|payout|rate)":\s*([\d.]+)/gi);
-
+        const matches = text.match(/"(multiplier|mult|crash|payout|val|rate)":\s*([\d.]+)/gi);
         if (matches) {
           matches.forEach(m => {
             const val = parseFloat(m.replace(/[^0-9.]/g, ''));
@@ -57,27 +55,45 @@ async function iniciarBot() {
   });
 
   await page.goto(URL_DO_JOGO, { waitUntil: 'networkidle2' });
-  console.log('[Bot] Monitorando rede e interface do jogo na Bingo Bet...');
+  console.log('[Bot] Monitorando histórico superior do Aviator na Bingo Bet...');
 
   let ultimaLida = '';
-  
-  // Varredura visual refinada focada no histórico superior do Aviator
+
+  // Varredura visual estrita focada apenas no topo (histórico de velas) e ignorando a tabela lateral
   setInterval(async () => {
     try {
-      for (const frame of page.frames()) {
+      const frames = page.frames();
+      for (const frame of frames) {
         const textoVela = await frame.evaluate(() => {
-          // Busca elementos estilizados nas barras de histórico típicas do Aviator
-          const seletoresHistorico = document.querySelectorAll('span, div, p');
-          for (let el of seletoresHistorico) {
-            const texto = el.innerText ? el.innerText.trim() : '';
-            // Valida se o texto tem estritamente o formato de multiplicador do jogo (ex: 2.38x, 14.20x)
-            if (/^\d+\.\d{2}x$/i.test(texto)) {
-              // Garante que é um elemento de texto puro (folha da árvore DOM) para evitar pegar blocos inteiros
-              if (el.children.length === 0) {
-                return texto;
+          // Tenta buscar primariamente os elementos da barra superior de histórico do Aviator (Spribe)
+          // Geralmente ficam em containers específicos de histórico ou carrossel superior
+          const pingsHistorico = document.querySelectorAll('div[class*="payout"], div[class*="bubble"], div[class*="history"] span, div[class*="recent"] span');
+          
+          for (let el of pingsHistorico) {
+            const txt = el.innerText ? el.innerText.trim() : '';
+            if (/^\d+\.\d{2}x$/i.test(txt) && el.children.length === 0) {
+              return txt; // Retorna o primeiro histórico válido do topo
+            }
+          }
+
+          // Fallback seguro: varre elementos de texto, mas EXCLUI explicitamente qualquer ancestral que seja tabela de apostas
+          const todosElementos = document.querySelectorAll('span');
+          for (let el of todosElementos) {
+            // Se o elemento estiver dentro da área de apostas dos jogadores (coluna esquerda), ignoramos
+            if (el.closest('.bets-list') || el.closest('[class*="players"]') || el.closest('[class*="bet-list"]')) {
+              continue;
+            }
+
+            const txt = el.innerText ? el.innerText.trim() : '';
+            if (/^\d+\.\d{2}x$/i.test(txt) && el.children.length === 0) {
+              // Verifica se está na parte superior da tela (coordenada Y menor que 150px, ou seja, no topo)
+              const rect = el.getBoundingClientRect();
+              if (rect.top < 120 && rect.width > 0) {
+                return txt;
               }
             }
           }
+
           return null;
         });
 
@@ -100,8 +116,8 @@ function enviarVela(mult) {
   const agora = new Date();
   const tempoAtualMs = agora.getTime();
 
-  // Trava anti-duplicação de milissegundos para evitar disparo seguido do mesmo elemento visual
-  if (mult === ultimaEnviada && (tempoAtualMs - timestampUltimoEnvio) < 3000) return;
+  // Trava para evitar duplicatas enviadas num intervalo inferior a 2 segundos
+  if (mult === ultimaEnviada && (tempoAtualMs - timestampUltimoEnvio) < 2000) return;
   
   ultimaEnviada = mult;
   timestampUltimoEnvio = tempoAtualMs;
