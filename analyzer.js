@@ -1,230 +1,197 @@
 /**
- * Motor Avançado de Análise Preditiva - Aviator com Auto-Aprendizado (Adaptive Weights)
- * Ajusta dinamicamente a agressividade das entradas com base nos erros e acertos recentes.
+ * Motor Avançado de Análise Preditiva - Aviator com Teorias e Validação Humana
+ * Simula raciocínio analítico: testa teorias de comportamento de mesa e só executa se houver rentabilidade recente.
  */
 
-// Memória interna de pesos dinâmicos do motor (Começam neutros e mudam com o erro/acerto)
-let pesosAdaptativos = {
-  pesoMinuto: 1.0,      // Ajusta a relevância da minutagem histórica
-  pesoTextura: 1.0,     // Ajusta a relevância do bloco de 15 velas
-  rigorRisco: 1.0       // Ajusta o rigor para evitar falsos sinais
+// Memória de desempenho das "Teorias" do apostador simulado (taxa de acerto hipotética recente)
+let desempenhoTeorias = {
+  teoriaRespiroPosBaixas: { acertos: 5, erros: 2 }, // Ex: Entrar após sequência de azuis quebrada
+  teoriaCicloMinuto:      { acertos: 5, erros: 2 }, // Ex: Entrar em minutos quentes recorrentes
+  teoriaFluxoRoxo:        { acertos: 5, erros: 2 }  // Ex: Entrar quando o bloco de velas curtas estabiliza
 };
 
-// Histórico interno de sinais disparados para auditoria de erro
+// Histórico de auditoria para feedback loop
 let ultimosSinaisEmitidos = [];
 
 function analisarHistorico(historyData) {
-  if (!historyData || historyData.length < 20) {
+  if (!historyData || historyData.length < 25) {
     return {
       signal: '⚪ AGUARDAR',
       sinal: '⚪ AGUARDAR',
-      motivo: 'Calibrando motor de auto-aprendizado (mín. 20 rodadas)...',
+      motivo: 'Formulando hipóteses e coletando dados da mesa (mín. 25 rodadas)...',
       alvo: 'N/A',
       confianca: '0%',
       taxaAcerto: '0.0%'
     };
   }
 
-  // -------------------------------------------------------------
-  // 0. AUTO-AVALIAÇÃO DE ERROS RECENTES (FEEDBACK LOOP)
-  // -------------------------------------------------------------
-  if (ultimosSinaisEmitidos.length > 0 && historyData.length > 0) {
-    const ultimoSinalRegistrado = ultimosSinaisEmitidos[ultimosSinaisEmitidos.length - 1];
-    // Se o sinal anterior era de entrada e a vela atual foi azul (<2x), o motor errou o timing
-    if (ultimoSinalRegistrado.tipo === 'ENTRADA' && historyData[0].mult < 2.0) {
-      // O motor errou: Auto-penalização para ficar mais prudente nas próximas
-      pesosAdaptativos.rigorRisco += 0.08; 
-      pesosAdaptativos.pesoTextura += 0.05;
-    } else if (ultimoSinalRegistrado.tipo === 'ENTRADA' && historyData[0].mult >= 2.0) {
-      // O motor acertou: Recompensa leve para flexibilizar a inteligência
-      pesosAdaptativos.rigorRisco = Math.max(0.85, pesosAdaptativos.rigorRisco - 0.03);
+  // -------------------------------------------------------------------------
+  // 0. AUTO-AVALIAÇÃO HUMANA (FEEDBACK LOOP DE RESULTADOS REAIS)
+  // -------------------------------------------------------------------------
+  if (ultimosSinaisEmitidos.length > 0) {
+    const ultimoSinal = ultimosSinaisEmitidos[ultimosSinaisEmitidos.length - 1];
+    const deuBom = historyData[0].mult >= 2.0; // Consideramos vitória se bateu 2x ou mais
+
+    // O apostador humano ajusta a confiança na teoria que usou com base no resultado real
+    if (deuBom) {
+      if (desempenhoTeorias[ultimoSinal.teoriaUsada]) {
+        desempenhoTeorias[ultimoSinal.teoriaUsada].acertos++;
+      }
+    } else {
+      if (desempenhoTeorias[ultimoSinal.teoriaUsada]) {
+        desempenhoTeorias[ultimoSinal.teoriaUsada].erros++;
+      }
     }
   }
 
   const ultimaVela = historyData[0];
   const penultimaVela = historyData[1];
-  const antepenultimaVela = historyData[2];
   
   const agora = new Date();
   const minutoAtualStr = agora.getMinutes().toString();
   const digitoMinutoAtual = parseInt(minutoAtualStr.slice(-1));
 
-  // -------------------------------------------------------------
-  // 1. CÁLCULO DINÂMICO DA TAXA DE ACERTO RECENTE (WIN RATE)
-  // -------------------------------------------------------------
-  let acertosSimulados = 0;
-  let totalAmostrasAvaliadas = Math.min(50, historyData.length - 5);
-  
-  for (let i = 0; i < totalAmostrasAvaliadas; i++) {
-    const velaCorrente = historyData[i].mult;
-    if (velaCorrente >= 2.00 && velaCorrente < 50) {
-      acertosSimulados++;
-    }
+  // -------------------------------------------------------------------------
+  // 1. CÁLCULO DE WIN RATE GLOBAL
+  // -------------------------------------------------------------------------
+  let acertosGlobais = 0;
+  let totalAmostras = Math.min(40, historyData.length - 2);
+  for (let i = 0; i < totalAmostras; i++) {
+    if (historyData[i].mult >= 2.00) acertosGlobais++;
   }
-  
-  let taxaAcertoCalculada = totalAmostrasAvaliadas > 0 
-    ? ((acertosSimulados / totalAmostrasAvaliadas) * 100) + (10 / pesosAdaptativos.rigorRisco)
-    : 68.5;
-  
-  taxaAcertoCalculada = Math.min(Math.max(taxaAcertoCalculada, 45.0), 94.0);
-  const winRateFormatado = `${taxaAcertoCalculada.toFixed(1)}%`;
+  let winRateCalculado = totalAmostras > 0 ? (acertosGlobais / totalAmostras) * 100 : 65.0;
+  winRateCalculado = Math.min(Math.max(winRateCalculado, 40.0), 92.0);
+  const winRateFormatado = `${winRateCalculado.toFixed(1)}%`;
 
-  // -------------------------------------------------------------
-  // 2. LEITURA DE TEXTURA (BLOCO DAS ÚLTIMAS 15 VELAS)
-  // -------------------------------------------------------------
-  const janelaCurtoPrazo = historyData.slice(0, 15);
-  let qAzuisJanela = 0;
-  let qRoxasJanela = 0;
-  let alternanciasRpidas = 0;
-
-  janelaCurtoPrazo.forEach((item, idx) => {
-    if (item.mult < 2) qAzuisJanela++;
-    else qRoxasJanela++;
-
-    if (idx < janelaCurtoPrazo.length - 1) {
-      const atualEazul = item.mult < 2;
-      const proximaEazul = janelaCurtoPrazo[idx + 1].mult < 2;
-      if (atualEazul !== proximaEazul) {
-        alternanciasRpidas++;
-      }
-    }
-  });
-
+  // -------------------------------------------------------------------------
+  // 2. FORMULAÇÃO DE TEORIAS (O HUMANO OBSERVANDO PADRÕES)
+  // -------------------------------------------------------------------------
+  // Analisando comportamento das últimas 15 velas
+  const janela15 = historyData.slice(0, 15);
   let azuisSeguidos = 0;
   for (let item of historyData) {
-    if (item.mult < 2) azuisSeguidos++;
+    if (item.mult < 2.0) azuisSeguidos++;
     else break;
   }
 
-  let texturaCurtoPrazo = 'HARMONICO';
-  if (alternanciasRpidas >= (10 * pesosAdaptativos.pesoTextura)) {
-    texturaCurtoPrazo = 'PING_PONG_ERRATICO';
-  } else if (qAzuisJanela >= Math.round(11 / pesosAdaptativos.pesoTextura)) {
-    texturaCurtoPrazo = 'SUFOCAMENTO_AZUL';
-  } else if (qRoxasJanela >= 5 && qRoxasJanela <= 9) {
-    texturaCurtoPrazo = 'FLUXO_RESPIRANDO';
-  }
+  let qRoxasJanela = janela15.filter(i => i.mult >= 2.0 && i.mult < 10).length;
+  let qAzuisJanela = janela15.filter(i => i.mult < 2.0).length;
 
-  let microPadraoDetectado = 'NEUTRO';
-  if (penultimaVela && antepenultimaVela) {
-    if (ultimaVela.mult > penultimaVela.mult && penultimaVela.mult > antepenultimaVela.mult && ultimaVela.mult < 10) {
-      microPadraoDetectado = 'ESCADINHA_ALTA';
-    }
-  }
+  // Teoria 1: O Respiro (Mesa estagnada em azuis exaustivos tende a dar uma esticada moderada)
+  const scoreTeoriaRespiro = (azuisSeguidos >= 3 && azuisSeguidos <= 6) ? 75 : 40;
 
-  if (antepenultimaVela && antepenultimaVela.mult >= 15 && ultimaVela.mult < 1.4 && penultimaVela.mult < 1.4) {
-    microPadraoDetectado = 'RESSACA_EXTREMA';
-  }
-
-  // -------------------------------------------------------------
-  // 3. CONTEXTO GLOBAL E MINUTAGEM
-  // -------------------------------------------------------------
-  let casasDesdeUltimaRosa = 0;
-  for (let i = 0; i < historyData.length; i++) {
-    if (historyData[i].mult >= 10) {
-      casasDesdeUltimaRosa = i;
-      break;
-    }
-  }
-
-  const vinteMinutosMs = 20 * 60 * 1000;
-  const agoraMs = agora.getTime();
-  const rosasRecentes = historyData.filter(item => {
-    const eRosa = item.mult >= 10;
-    const dentroJanela = item.timestamp ? (agoraMs - item.timestamp) <= vinteMinutosMs : true;
-    return eRosa && dentroJanela;
-  });
-
-  const contagemDigitos = Array(10).fill(0);
+  // Teoria 2: Ciclo de Minutagem (Repetição comportamental nos minutos)
+  const rosasRecentes = historyData.filter(item => item.mult >= 10);
+  let ocorrenciasNesteDigito = 0;
   rosasRecentes.forEach(item => {
     if (item.time) {
       const min = item.time.split(':')[1];
-      if (min) {
-        const digito = parseInt(min.slice(-1));
-        contagemDigitos[digito]++;
-      }
+      if (min && parseInt(min.slice(-1)) === digitoMinutoAtual) ocorrenciasNesteDigito++;
     }
   });
-  const pesoMinutoAtual = (contagemDigitos[digitoMinutoAtual] || 0) * pesosAdaptativos.pesoMinuto;
+  const scoreTeoriaMinuto = ocorrenciasNesteDigito >= 2 ? 80 : 50;
 
-  // -------------------------------------------------------------
-  // 4. FILTROS DE RISCO ADAPTATIVOS
-  // -------------------------------------------------------------
-  if (texturaCurtoPrazo === 'PING_PONG_ERRATICO') {
-    return registrarSinalESair('🔴 CAUTELA / MESA EM PING-PONG', `Textura instável sob rigor adaptativo (${pesosAdaptativos.rigorRisco.toFixed(2)}x).`, 'N/A', '15%', winRateFormatado, 'ESPERA');
+  // Teoria 3: Fluxo Respirando (Equilíbrio saudável entre velas roxas e baixas)
+  const scoreTeoriaFluxo = (qRoxasJanela >= 5 && qAzuisJanela <= 10) ? 70 : 45;
+
+  // -------------------------------------------------------------------------
+  // 3. AVALIAÇÃO DE RENTABILIDADE DAS TEORIAS (BACKTESTING RÁPIDO)
+  // -------------------------------------------------------------------------
+  // Função para calcular a taxa de acerto de uma teoria específica no histórico recente
+  function calcularRentabilidadeTeorias(nomeTeoria) {
+    const t = desempenhoTeorias[nomeTeoria];
+    const total = t.acertos + t.erros;
+    return total > 0 ? (t.acertos / total) * 100 : 50;
   }
 
-  if (texturaCurtoPrazo === 'SUFOCAMENTO_AZUL' && azuisSeguidos >= 4) {
-    return registrarSinalESair('🔴 ZONA DE BLOQUEIO / EXCESSO DE AZUIS', `As últimas 15 velas registram ${qAzuisJanela} azuis sob o filtro de erro.`, 'N/A', '20%', winRateFormatado, 'ESPERA');
+  const rentabilidadeRespiro = calcularRentabilidadeTeorias('teoriaRespiroPosBaixas');
+  const rentabilidadeMinuto = calcularRentabilidadeTeorias('teoriaCicloMinuto');
+  const rentabilidadeFluxo = calcularRentabilidadeTeorias('teoriaFluxoRoxo');
+
+  // Seleciona qual "teoria" está gerando rendimento positivo neste exato momento da mesa
+  let melhorTeoria = 'Nenhuma';
+  let maiorScore = 0;
+  let teoriaAtivaKey = '';
+
+  if (scoreTeoriaRespiro > maiorScore && rentabilidadeRespiro >= 50) {
+    maiorScore = scoreTeoriaRespiro;
+    melhorTeoria = 'Teoria do Respiro Pós-Exaustão Azul';
+    teoriaAtivaKey = 'teoriaRespiroPosBaixas';
+  }
+  if (scoreTeoriaMinuto > maiorScore && rentabilidadeMinuto >= 50) {
+    maiorScore = scoreTeoriaMinuto;
+    melhorTeoria = 'Teoria de Sincronia de Minutagem';
+    teoriaAtivaKey = 'teoriaCicloMinuto';
+  }
+  if (scoreTeoriaFluxo > maiorScore && rentabilidadeFluxo >= 50) {
+    maiorScore = scoreTeoriaFluxo;
+    melhorTeoria = 'Teoria de Fluxo e Estabilidade Local';
+    teoriaAtivaKey = 'teoriaFluxoRoxo';
   }
 
-  if (microPadraoDetectado === 'RESSACA_EXTREMA') {
-    return registrarSinalESair('🔴 DEFESA / RESSACA DE MESA', `Micro-padrão de ressaca detectado após prêmio alto.`, 'N/A', '10%', winRateFormatado, 'ESPERA');
-  }
-
-  // -------------------------------------------------------------
-  // 5. PONTUAÇÃO DE CONFLUÊNCIA TÁTICA (APRENDIZAGEM APLICADA)
-  // -------------------------------------------------------------
-  let pontuacao = 0;
-
-  if (texturaCurtoPrazo === 'FLUXO_RESPIRANDO') pontuacao += 30;
-  if (microPadraoDetectado === 'ESCADINHA_ALTA') pontuacao += 25;
-
-  if (pesoMinutoAtual >= 2) pontuacao += 30;
-  else if (pesoMinutoAtual >= 1) pontuacao += 15;
-
-  if (casasDesdeUltimaRosa >= 4 && casasDesdeUltimaRosa <= 12) pontuacao += 20;
-
-  // Aplicação do fator de rigor adaptativo gerado pelos erros passados
-  pontuacao = Math.round(pontuacao / pesosAdaptativos.rigorRisco);
-  pontuacao = Math.min(Math.max(pontuacao, 10), 98);
-
-  // -------------------------------------------------------------
-  // 6. DECISÃO FINAL COM REGISTRO DE APRENDIZADO
-  // -------------------------------------------------------------
-  const ultimasRosas = historyData.filter(i => i.mult >= 10).slice(0, 10);
-  const mediaRosa = ultimasRosas.length > 0 
-    ? (ultimasRosas.reduce((acc, c) => acc + c.mult, 0) / ultimasRosas.length) 
-    : 10;
-
-  if (pontuacao >= 65) {
-    const alvoSugerido = mediaRosa >= 15 ? '3.00x a 7.00x' : '2.00x a 4.00x';
+  // Se nenhuma teoria estiver com rendimento positivo comprovado, o "humano" decide ficar de fora
+  if (maiorScore < 60 || !teoriaAtivaKey) {
     return registrarSinalESair(
-      '🟢 ENTRADA COM TEXTURA FAVORÁVEL', 
-      `Motor Adaptativo (Rigor: ${pesosAdaptativos.rigorRisco.toFixed(2)}): Bloco de 15 velas respirando bem e minuto alinhado.`, 
-      alvoSugerido, 
-      `${pontuacao}%`, 
-      winRateFormatado, 
-      'ENTRADA'
+      '🔴 CAUTELA / TEORIAS INVALIDADAS',
+      `O apostador simulado testou as teorias atuais, mas o rendimento estatístico recente está abaixo de 50%. Aguardando cenário limpo.`,
+      'N/A',
+      '20%',
+      winRateFormatado,
+      'ESPERA',
+      'nenhuma'
     );
   }
 
-  if (pontuacao >= 40) {
+  // -------------------------------------------------------------------------
+  // 4. FILTROS DE PROTEÇÃO (EVITAR ENTRADAS EM "RESSACA")
+  // -------------------------------------------------------------------------
+  if (penultimaVela && penultimaVela.mult >= 20 && ultimaVela.mult < 1.3) {
     return registrarSinalESair(
-      '🟡 ENTRADA TÁTICA MODERADA', 
-      `Motor Adaptativo: Cenário equilibrado, exigindo cautela e saída rápida sob ajuste dinâmico.`, 
-      '1.50x a 2.00x', 
-      `${pontuacao}%`, 
-      winRateFormatado, 
-      'ENTRADA'
+      '🔴 MODO DEFESA / RESSACA PÓS-PRÊMIO',
+      `O operador humano identificou crash logo após vela muito alta. Risco alto de mesa travada.`,
+      'N/A',
+      '15%',
+      winRateFormatado,
+      'ESPERA',
+      teoriaAtivaKey
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // 5. DECISÃO FINAL BASEADA NA HIPÓTESE VALIDADA
+  // -------------------------------------------------------------------------
+  let confiancaFinal = Math.round(maiorScore * 0.9);
+
+  if (confiancaFinal >= 70) {
+    return registrarSinalESair(
+      '🟢 ENTRADA COM BASE EM HIPÓTESE VALIDADA',
+      `Teoria Ativa: "${melhorTeoria}" com histórico de rendimento positivo recente.`,
+      '2.00x a 4.50x',
+      `${confiancaFinal}%`,
+      winRateFormatado,
+      'ENTRADA',
+      teoriaAtivaKey
     );
   }
 
   return registrarSinalESair(
-    '⚪ AGUARDAR FLUXO IDEAL', 
-    `Motor Adaptativo: Rigor elevado automaticamente devido a histórico recente. Aguardando melhor encaixe.`, 
-    'N/A', 
-    `${pontuacao}%`, 
-    winRateFormatado, 
-    'ESPERA'
+    '🟡 OPORTUNIDADE TÁTICA EM OBSERVAÇÃO',
+    `Teoria "${melhorTeoria}" em teste, mas exigindo cautela e alvos baixos.`,
+    '1.50x a 2.00x',
+    `${confiancaFinal}%`,
+    winRateFormatado,
+    'ENTRADA',
+    teoriaAtivaKey
   );
 }
 
-// Função auxiliar para registrar o sinal na memória e alimentar o loop de erro/acerto
-function registrarSinalESair(sinal, motivo, alvo, confianca, taxaAcerto, tipoAcao) {
-  ultimosSinaisEmitidos.push({ tipo: tipoAcao, timestamp: Date.now() });
-  if (ultimosSinaisEmitidos.length > 20) {
-    ultimosSinaisEmitidos.shift(); // Mantém apenas os últimos 20 sinais na memória RAM
+// Função auxiliar para registrar histórico e atualizar o ciclo de aprendizado humanizado
+function registrarSinalESair(sinal, motivo, alvo, confianca, taxaAcerto, tipoAcao, teoriaUsada) {
+  if (tipoAcao === 'ENTRADA') {
+    ultimosSinaisEmitidos.push({ tipo: tipoAcao, teoriaUsada: teoriaUsada, timestamp: Date.now() });
+    if (ultimosSinaisEmitidos.length > 15) {
+      ultimosSinaisEmitidos.shift();
+    }
   }
 
   return {
