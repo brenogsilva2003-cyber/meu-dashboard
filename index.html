@@ -40,23 +40,29 @@
         </div>
       </div>
 
-      <!-- CARDS SUPERIORES DE VELAS ALTAS -->
-      <div class="top-summary-cards">
-        <div class="summary-card">
-          <div class="card-title"><span class="dot rosa-dot"></span> VELA ALTA (10X+)</div>
-          <div class="card-mult" id="card-10x">0.00x</div>
-          <div class="card-time-detail" id="ago-10x">--</div>
+      <!-- CARDS DE FAIXAS DE VELAS ALTAS E EXTREMAS (ATUALIZADO) -->
+      <div class="top-summary-cards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 25px;">
+        
+        <div class="summary-card" style="background: #181b2a; border: 1px solid #2b2f4a; border-radius: 10px; padding: 15px;">
+          <div class="card-title" style="font-size: 0.75rem; color: #8a8d9b; font-weight: bold; margin-bottom: 8px;"><span class="dot rosa-dot"></span> DESDE A ÚLTIMA VELA DE 10X–50X</div>
+          <div style="font-size: 0.9rem; color: #fff;">Velas: <strong id="velas-10-50" style="color: #00f0ff;">-</strong> | Tempo: <strong id="tempo-10-50" style="color: #ffb703;">-</strong></div>
         </div>
-        <div class="summary-card">
-          <div class="card-title"><span class="dot rosa-dot"></span> VELA ALTA (50X+)</div>
-          <div class="card-mult" id="card-50x">0.00x</div>
-          <div class="card-time-detail" id="ago-50x">--</div>
+
+        <div class="summary-card" style="background: #181b2a; border: 1px solid #2b2f4a; border-radius: 10px; padding: 15px;">
+          <div class="card-title" style="font-size: 0.75rem; color: #8a8d9b; font-weight: bold; margin-bottom: 8px;"><span class="dot rosa-dot"></span> DESDE A ÚLTIMA VELA DE 50X–100X</div>
+          <div style="font-size: 0.9rem; color: #fff;">Velas: <strong id="velas-50-100" style="color: #00f0ff;">-</strong> | Tempo: <strong id="tempo-50-100" style="color: #ffb703;">-</strong></div>
         </div>
-        <div class="summary-card">
-          <div class="card-title"><span class="dot hot-dot"></span> VELA EXTREMA (100X+)</div>
-          <div class="card-mult" id="card-100x">0.00x</div>
-          <div class="card-time-detail" id="ago-100x">--</div>
+
+        <div class="summary-card" style="background: #181b2a; border: 1px solid #2b2f4a; border-radius: 10px; padding: 15px;">
+          <div class="card-title" style="font-size: 0.75rem; color: #8a8d9b; font-weight: bold; margin-bottom: 8px;"><span class="dot hot-dot"></span> DESDE A ÚLTIMA VELA DE 100X–999X</div>
+          <div style="font-size: 0.9rem; color: #fff;">Velas: <strong id="velas-100-999" style="color: #00f0ff;">-</strong> | Tempo: <strong id="tempo-100-999" style="color: #ffb703;">-</strong></div>
         </div>
+
+        <div class="summary-card" style="background: #181b2a; border: 1px solid #2b2f4a; border-radius: 10px; padding: 15px;">
+          <div class="card-title" style="font-size: 0.75rem; color: #8a8d9b; font-weight: bold; margin-bottom: 8px;"><span class="dot hot-dot"></span> DESDE A ÚLTIMA VELA DE 1.000X+</div>
+          <div style="font-size: 0.9rem; color: #fff;">Velas: <strong id="velas-1000" style="color: #00f0ff;">-</strong> | Tempo: <strong id="tempo-1000" style="color: #ffb703;">-</strong></div>
+        </div>
+
       </div>
 
       <!-- CARDS DE MÉDIAS -->
@@ -129,6 +135,6 @@
     </div>
   </main>
 
-  <script src="app.js?v=2.2"></script>
+  <script src="app.js?v=2.3"></script>
 </body>
 </html>
