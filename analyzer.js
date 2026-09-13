@@ -1,25 +1,23 @@
 /**
- * Motor Avançado de Análise Preditiva - Aviator com Teorias, Validação e Ceticismo Humano
- * Simula a desconfiança natural do apostador: avalia riscos, hesita após erros e pondera entradas.
+ * Motor Avançado de Análise Preditiva - Aviator com Lógica Comportamental Tática
+ * Simula a leitura humana de micro-padrões, limites de azuis/roxas e recuo estratégico.
  */
 
-// Memória de desempenho das "Teorias" do apostador simulado
 let desempenhoTeorias = {
-  teoriaRespiroPosBaixas: { acertos: 4, erros: 3 }, 
-  teoriaCicloMinuto:      { acertos: 4, erros: 3 }, 
-  teoriaFluxoRoxo:        { acertos: 4, erros: 3 }  
+  teoriaRespiroControlado: { acertos: 5, erros: 2 }, 
+  teoriaLimitacaoRoxa:      { acertos: 5, erros: 2 }, 
+  teoriaFluxoTatico:        { acertos: 5, erros: 2 }  
 };
 
-// Histórico de auditoria para feedback loop e índice de ceticismo
 let ultimosSinaisEmitidos = [];
-let indiceCeticismo = 1.0; // Controla o "pé atrás" do operador humano
+let indiceCeticismo = 1.0; // Ceticismo flexível e dinâmico
 
 function analisarHistorico(historyData) {
   if (!historyData || historyData.length < 25) {
     return {
       signal: '⚪ AGUARDAR',
       sinal: '⚪ AGUARDAR',
-      motivo: 'Analisando o comportamento da mesa e calibrando ceticismo inicial (mín. 25 rodadas)...',
+      motivo: 'Mapeando comportamento tático da mesa e limites de azuis (mín. 25 rodadas)...',
       alvo: 'N/A',
       confianca: '0%',
       taxaAcerto: '0.0%'
@@ -27,23 +25,24 @@ function analisarHistorico(historyData) {
   }
 
   // -------------------------------------------------------------------------
-  // 0. AUTO-AVALIAÇÃO E O "PÉ ATRÁS" (CETICISMO HUMANO)
+  // 0. AVALIAÇÃO INTELIGENTE PÓS-RODADA (HUMANIZADA)
   // -------------------------------------------------------------------------
   const ultimaVela = historyData[0];
   const penultimaVela = historyData[1];
+  const antepenultimaVela = historyData[2];
   const deuBomUltimaRodada = ultimaVela.mult >= 2.0;
 
   if (ultimosSinaisEmitidos.length > 0) {
     const ultimoSinal = ultimosSinaisEmitidos[ultimosSinaisEmitidos.length - 1];
     
     if (deuBomUltimaRodada) {
-      // Acertou: O humano relaxa um pouco o ceticismo, mas sem perder a cautela
       desempenhoTeorias[ultimoSinal.teoriaUsada].acertos++;
-      indiceCeticismo = Math.max(0.85, indiceCeticismo - 0.05);
+      // Alivia o ceticismo de forma suave quando a leitura dá certo
+      indiceCeticismo = Math.max(0.80, indiceCeticismo - 0.08);
     } else {
-      // Errou: O humano fica com receio, aumenta a desconfiança para a próxima rodada
       desempenhoTeorias[ultimoSinal.teoriaUsada].erros++;
-      indiceCeticismo = Math.min(1.40, indiceCeticismo + 0.15); 
+      // Eleva o ceticismo com cautela, sem travar totalmente se houver padrão limpo
+      indiceCeticismo = Math.min(1.25, indiceCeticismo + 0.12); 
     }
   }
 
@@ -64,74 +63,71 @@ function analisarHistorico(historyData) {
   const winRateFormatado = `${winRateCalculado.toFixed(1)}%`;
 
   // -------------------------------------------------------------------------
-  // 2. FORMULAÇÃO DE TEORIAS (O HUMANO OBSERVANDO O GRÁFICO)
+  // 2. LEITURA DE MICRO-PADRÕES E LIMITAÇÕES (COMPORTAMENTO HUMANO)
   // -------------------------------------------------------------------------
-  const janela15 = historyData.slice(0, 15);
-  let azuisSeguidos = 0;
+  const janelaRecente = historyData.slice(0, 10);
+  
+  // Conta quantas azuis isoladas ou sequências curtas de azul ocorreram recentemente
+  let azuisSeguidasRecentes = 0;
   for (let item of historyData) {
-    if (item.mult < 2.0) azuisSeguidos++;
+    if (item.mult < 2.0) azuisSeguidasRecentes++;
     else break;
   }
 
-  let qRoxasJanela = janela15.filter(i => i.mult >= 2.0 && i.mult < 10).length;
-  let qAzuisJanela = janela15.filter(i => i.mult < 2.0).length;
+  // Verifica se as roxas estão se limitando (ex: máximo de 2 roxas seguidas antes de um respiro)
+  let roxasSeguidas = 0;
+  for (let item of historyData) {
+    if (item.mult >= 2.0 && item.mult < 10) roxasSeguidas++;
+    else break;
+  }
 
-  const scoreTeoriaRespiro = (azuisSeguidos >= 3 && azuisSeguidos <= 6) ? 75 : 40;
-
-  const rosasRecentes = historyData.filter(item => item.mult >= 10);
-  let ocorrenciasNesteDigito = 0;
-  rosasRecentes.forEach(item => {
-    if (item.time) {
-      const min = item.time.split(':')[1];
-      if (min && parseInt(min.slice(-1)) === digitoMinutoAtual) ocorrenciasNesteDigito++;
-    }
-  });
-  const scoreTeoriaMinuto = ocorrenciasNesteDigito >= 2 ? 80 : 50;
-
-  const scoreTeoriaFluxo = (qRoxasJanela >= 5 && qAzuisJanela <= 10) ? 70 : 45;
+  // Identifica se há padrão de "1 azul isolada entre roxas" (micro-padrão de respiro controlado)
+  let temPadraoAzulIsolada = (penultimaVela.mult < 2.0 && ultimaVela.mult >= 2.0 && antepenultimaVela.mult >= 2.0);
+  let mercadoEstavelRoxas = (roxasSeguidas <= 3 && azuisSeguidasRecentes <= 2);
 
   // -------------------------------------------------------------------------
-  // 3. AVALIAÇÃO DE RENTABILIDADE COM O FILTRO DE CETICISMO
+  // 3. AVALIAÇÃO DE TEORIAS COM FILTRO TÁTICO
   // -------------------------------------------------------------------------
-  function calcularRentabilidadeTeorias(nomeTeoria) {
+  function calcularRentabilidade(nomeTeoria) {
     const t = desempenhoTeorias[nomeTeoria];
     const total = t.acertos + t.erros;
     return total > 0 ? (t.acertos / total) * 100 : 50;
   }
 
-  const rentabilidadeRespiro = calcularRentabilidadeTeorias('teoriaRespiroPosBaixas');
-  const rentabilidadeMinuto = calcularRentabilidadeTeorias('teoriaCicloMinuto');
-  const rentabilidadeFluxo = calcularRentabilidadeTeorias('teoriaFluxoRoxo');
+  let scoreRespiroControlado = temPadraoAzulIsolada ? 82 : 50;
+  let scoreLimitacaoRoxa = mercadoEstavelRoxas ? 78 : 45;
+  let scoreFluxoTatico = (azuisSeguidasRecentes === 1) ? 75 : 40;
 
   let melhorTeoria = 'Nenhuma';
   let maiorScore = 0;
   let teoriaAtivaKey = '';
 
-  if (scoreTeoriaRespiro > maiorScore && rentabilidadeRespiro >= 52) {
-    maiorScore = scoreTeoriaRespiro;
-    melhorTeoria = 'Teoria do Respiro Pós-Exaustão Azul';
-    teoriaAtivaKey = 'teoriaRespiroPosBaixas';
+  if (scoreRespiroControlado > maiorScore && calcularRentabilidade('teoriaRespiroControlado') >= 50) {
+    maiorScore = scoreRespiroControlado;
+    melhorTeoria = 'Leitura de Respiro Controlado (Azul Isolada)';
+    teoriaAtivaKey = 'teoriaRespiroControlado';
   }
-  if (scoreTeoriaMinuto > maiorScore && rentabilidadeMinuto >= 52) {
-    maiorScore = scoreTeoriaMinuto;
-    melhorTeoria = 'Teoria de Sincronia de Minutagem';
-    teoriaAtivaKey = 'teoriaCicloMinuto';
+  if (scoreLimitacaoRoxa > maiorScore && calcularRentabilidade('teoriaLimitacaoRoxa') >= 50) {
+    maiorScore = scoreLimitacaoRoxa;
+    melhorTeoria = 'Padrão de Limitação de Roxas/Azuis';
+    teoriaAtivaKey = 'teoriaLimitacaoRoxa';
   }
-  if (scoreTeoriaFluxo > maiorScore && rentabilidadeFluxo >= 52) {
-    maiorScore = scoreTeoriaFluxo;
-    melhorTeoria = 'Teoria de Fluxo e Estabilidade Local';
-    teoriaAtivaKey = 'teoriaFluxoRoxo';
+  if (scoreFluxoTatico > maiorScore && calcularRentabilidade('teoriaFluxoTatico') >= 50) {
+    maiorScore = scoreFluxoTatico;
+    melhorTeoria = 'Fluxo Tático de Retomada';
+    teoriaAtivaKey = 'teoriaFluxoTatico';
   }
 
-  // Se o ceticismo estiver alto (devido a erros recentes) ou o score for fraco, o operador recua
-  let limiarMinimoAceitacao = 65 * indiceCeticismo;
-
-  if (maiorScore < limiarMinimoAceitacao || !teoriaAtivaKey) {
+  // -------------------------------------------------------------------------
+  // 4. MECANISMO DE RECUO INTELIGENTE (HORA DE PARAR / EVITAR ARMADILHAS)
+  // -------------------------------------------------------------------------
+  // Se o mercado estourou para muitas azuis seguidas (quebra de padrão) ou o ceticismo estourou
+  if (azuisSeguidasRecentes >= 3 || maiorScore < (58 * indiceCeticismo)) {
     return registrarSinalESair(
-      '🔴 CETICISMO ATIVO / AGUARDAR MESA LIMPA',
-      `O operador humano está com pé atrás (Índice de Ceticismo: ${indiceCeticismo.toFixed(2)}). As teorias atuais não superaram a desconfiança pós-resultados.`,
+      '🛡️ RECUO TÁTICO / OBSERVANDO MESA',
+      `O padrão de limitação quebrou (Sequência de azuis: ${azuisSeguidasRecentes}). O operador humano recua estrategicamente para evitar armadilhas até surgir nova oportunidade.`,
       'N/A',
-      '25%',
+      '30%',
       winRateFormatado,
       'ESPERA',
       'nenhuma'
@@ -139,33 +135,16 @@ function analisarHistorico(historyData) {
   }
 
   // -------------------------------------------------------------------------
-  // 4. FILTROS DE PROTEÇÃO E HESITAÇÃO EXTRA
+  // 5. DECISÃO DE ENTRADA CALIBRADA
   // -------------------------------------------------------------------------
-  if (penultimaVela && penultimaVela.mult >= 15 && ultimaVela.mult < 1.4) {
-    return registrarSinalESair(
-      '🔴 HESITAÇÃO / RESSACA IDENTIFICADA',
-      `O operador identificou padrão clássico de repique baixo após vela alta e prefere ficar de fora por receio.`,
-      'N/A',
-      '15%',
-      winRateFormatado,
-      'ESPERA',
-      teoriaAtivaKey
-    );
-  }
+  let confiancaFinal = Math.round((maiorScore / indiceCeticismo) * 0.90);
+  confiancaFinal = Math.min(Math.max(confiancaFinal, 35), 89);
 
-  // -------------------------------------------------------------------------
-  // 5. DECISÃO FINAL CONDICIONADA AO RECEIO CALCULADO
-  // -------------------------------------------------------------------------
-  // Reduz a confiança exibida proporcionalmente ao ceticismo atual do operador
-  let confiancaFinal = Math.round((maiorScore / indiceCeticismo) * 0.85);
-  confiancaFinal = Math.min(Math.max(confiancaFinal, 30), 88);
-
-  // Mesmo que o score seja alto, se o ceticismo estiver pesado, ele evita dar "Verde Direto" e manda cautela amarela
-  if (confiancaFinal >= 68 && indiceCeticismo <= 1.1) {
+  if (confiancaFinal >= 65) {
     return registrarSinalESair(
-      '🟢 ENTRADA MODERADA (VALIDADA COM CAUTELA)',
-      `Teoria Ativa: "${melhorTeoria}". O operador avaliou o risco e encontrou espaço, mantendo cautela moderada.`,
-      '2.00x a 4.00x',
+      '🟢 OPORTUNIDADE TÁTICA IDENTIFICADA',
+      `Padrão validado ("${melhorTeoria}"). O comportamento da mesa indica respeito aos limites de velas baixas. Entrada controlada recomendada.`,
+      '2.00x a 3.50x',
       `${confiancaFinal}%`,
       winRateFormatado,
       'ENTRADA',
@@ -174,8 +153,8 @@ function analisarHistorico(historyData) {
   }
 
   return registrarSinalESair(
-    '🟡 OPORTUNIDADE SOB OBSERVAÇÃO (PÉ ATRÁS)',
-    `Teoria "${melhorTeoria}" em análise, mas o ceticismo do operador recomenda apenas entradas leves e rápidas.`,
+    '🟡 AGUARDANDO CONFIRMAÇÃO DO PADRÃO',
+    `Mercado sob observação atenta. A teoria "${melhorTeoria}" está montando estrutura, mas exige cautela antes de arriscar capital.`,
     '1.50x a 2.00x',
     `${confiancaFinal}%`,
     winRateFormatado,
