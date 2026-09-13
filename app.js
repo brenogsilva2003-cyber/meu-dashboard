@@ -11,7 +11,7 @@ setInterval(() => {
   
   // Atualiza em tempo real a minutagem e os tempos decorridos
   renderizarMinutagem20Minutos();
-  atualizarTemposDecorridos();
+  atualizarCardsSuperiores();
 }, 1000);
 
 // Conexão WebSocket Segura e Dinâmica para Local ou Render
@@ -118,9 +118,9 @@ function calcMinutosAtras(timestamp) {
   if (mins >= 60) {
     const hrs = Math.floor(mins / 60);
     const restMins = mins % 60;
-    return `${hrs}h ${restMins}min atrás`;
+    return `${hrs}h ${restMins}min`;
   }
-  return `${mins} min atrás`;
+  return `${mins} min`;
 }
 
 function renderizarTudo() {
@@ -206,35 +206,44 @@ function renderizarVelasComCasas() {
   }).join('');
 }
 
-function atualizarCardsSuperiores() {
-  const alta10 = historyData.find(i => i.mult >= 10 && i.mult < 50);
-  const alta50 = historyData.find(i => i.mult >= 50 && i.mult < 100);
-  const alta100 = historyData.find(i => i.mult >= 100);
+function calcularMetricasFaixa(condicaoFn) {
+  let velasContador = 0;
+  let itemEncontrado = null;
 
-  setVal('card-10x', alta10 ? `${alta10.mult.toFixed(2)}x` : '0.00x');
-  setVal('card-50x', alta50 ? `${alta50.mult.toFixed(2)}x` : '0.00x');
-  setVal('card-100x', alta100 ? `${alta100.mult.toFixed(2)}x` : '0.00x');
+  for (let i = 0; i < historyData.length; i++) {
+    if (condicaoFn(historyData[i].mult)) {
+      itemEncontrado = historyData[i];
+      break;
+    } else {
+      velasContador++;
+    }
+  }
 
-  const qualquerRosa = historyData.find(i => i.mult >= 10);
-  const qualquerHot = historyData.find(i => i.mult >= 100);
-
-  setVal('card-vela-alta', qualquerRosa ? `${qualquerRosa.mult.toFixed(2)}x` : '0.00x');
-  setVal('time-vela-alta', qualquerRosa ? qualquerRosa.time : '--:--');
-
-  setVal('card-vela-extrema', qualquerHot ? `${qualquerHot.mult.toFixed(2)}x` : '0.00x');
-  setVal('time-vela-extrema', qualquerHot ? qualquerHot.time : '--:--');
-
-  atualizarTemposDecorridos();
+  return {
+    velas: itemEncontrado ? velasContador : '-',
+    tempo: itemEncontrado ? calcMinutosAtras(itemEncontrado.timestamp) : '-'
+  };
 }
 
-function atualizarTemposDecorridos() {
-  const alta10 = historyData.find(i => i.mult >= 10 && i.mult < 50);
-  const alta50 = historyData.find(i => i.mult >= 50 && i.mult < 100);
-  const alta100 = historyData.find(i => i.mult >= 100);
+function atualizarCardsSuperiores() {
+  // Faixas exatas: 10x-50x | 50x-100x | 100x-999x | 1000x+
+  const f10_50 = calcularMetricasFaixa(m => m >= 10 && m < 50);
+  const f50_100 = calcularMetricasFaixa(m => m >= 50 && m < 100);
+  const f100_999 = calcularMetricasFaixa(m => m >= 100 && m < 1000);
+  const f1000 = calcularMetricasFaixa(m => m >= 1000);
 
-  setVal('ago-10x', alta10 ? calcMinutosAtras(alta10.timestamp) : '--');
-  setVal('ago-50x', alta50 ? calcMinutosAtras(alta50.timestamp) : '--');
-  setVal('ago-100x', alta100 ? calcMinutosAtras(alta100.timestamp) : '--');
+  // Atualiza os elementos na tela com base nos IDs do novo index.html
+  setVal('velas-10-50', f10_50.velas);
+  setVal('tempo-10-50', f10_50.tempo);
+
+  setVal('velas-50-100', f50_100.velas);
+  setVal('tempo-50-100', f50_100.tempo);
+
+  setVal('velas-100-999', f100_999.velas);
+  setVal('tempo-100-999', f100_999.tempo);
+
+  setVal('velas-1000', f1000.velas);
+  setVal('tempo-1000', f1000.tempo);
 }
 
 function renderizarDistribuição() {
