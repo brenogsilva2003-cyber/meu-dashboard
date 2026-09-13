@@ -1,11 +1,11 @@
 /**
- * Motor Avançado de Análise Preditiva - Com faixas ajustadas (10-50, 50-100, 100-999, 1000+)
+ * Motor Avançado de Análise Preditiva - Com Confluência de Fatores (Casas, Minutagem e Fluxo)
  */
 
 let desempenhoTeorias = {
   teoriaRespiroControlado: { acertos: 5, erros: 2 }, 
-  teoriaLimitacaoRoxa:      { acertos: 5, erros: 2 }, 
-  teoriaFluxoTatico:        { acertos: 5, erros: 2 }  
+  teoriaLimitacaoRoxa:       { acertos: 5, erros: 2 }, 
+  teoriaFluxoTatico:         { acertos: 5, erros: 2 }  
 };
 
 let ultimosSinaisEmitidos = [];
@@ -28,15 +28,23 @@ function analisarHistorico(historyData) {
   const penultimaVela = historyData[1];
   const antepenultimaVela = historyData[2];
   const deuBomUltimaRodada = ultimaVela.mult >= 2.0;
+  const foiVelaAltaUltima = ultimaVela.mult >= 10.0;
 
+  // Ajuste dinâmico do ceticismo com base no comportamento de picos
   if (ultimosSinaisEmitidos.length > 0) {
     const ultimoSinal = ultimosSinaisEmitidos[ultimosSinaisEmitidos.length - 1];
+    
     if (deuBomUltimaRodada) {
       desempenhoTeorias[ultimoSinal.teoriaUsada].acertos++;
-      indiceCeticismo = Math.max(0.80, indiceCeticismo - 0.08);
+      if (foiVelaAltaUltima) {
+        // Pós-vela alta exige um respiro saudável, sem travar o trader, mas dosando o otimismo
+        indiceCeticismo = Math.min(1.15, indiceCeticismo + 0.04); 
+      } else {
+        indiceCeticismo = Math.max(0.85, indiceCeticismo - 0.05);
+      }
     } else {
       desempenhoTeorias[ultimoSinal.teoriaUsada].erros++;
-      indiceCeticismo = Math.min(1.25, indiceCeticismo + 0.12); 
+      indiceCeticismo = Math.min(1.30, indiceCeticismo + 0.10); 
     }
   }
 
@@ -50,7 +58,7 @@ function analisarHistorico(historyData) {
   winRateCalculado = Math.min(Math.max(winRateCalculado, 35.0), 90.0);
   const winRateFormatado = `${winRateCalculado.toFixed(1)}%`;
 
-  // Leitura de Micro-padrões
+  // --- ANÁLISE DE CONFLUÊNCIA DE FATORES (ESTILO HUMANO) ---
   let azuisSeguidasRecentes = 0;
   for (let item of historyData) {
     if (item.mult < 2.0) azuisSeguidasRecentes++;
@@ -63,21 +71,34 @@ function analisarHistorico(historyData) {
     else break;
   }
 
+  // Verificando padrão estrutural de respiro e limites
   let temPadraoAzulIsolada = (penultimaVela.mult < 2.0 && ultimaVela.mult >= 2.0 && antepenultimaVela.mult >= 2.0);
   let mercadoEstavelRoxas = (roxasSeguidas <= 3 && azuisSeguidasRecentes <= 2);
 
-  let scoreRespiroControlado = temPadraoAzulIsolada ? 82 : 50;
-  let scoreLimitacaoRoxa = mercadoEstavelRoxas ? 78 : 45;
-  let scoreFluxoTatico = (azuisSeguidasRecentes === 1) ? 75 : 40;
+  // Verificação de confluência de histórico de velas rosas recentes (Espelho / Fluxo Quente)
+  let rosasRecentesNoHistorico = historyData.slice(0, 15).filter(i => i.mult >= 10).length;
+  let temHistoricoEspelhoQuente = rosasRecentesNoHistorico >= 2; // Se já entregou mais de uma rosa recentemente, há indício de corredor ativo
+
+  // Atribuição de pontos por teoria considerando confluência
+  let scoreRespiroControlado = temPadraoAzulIsolada ? 80 : 45;
+  let scoreLimitacaoRoxa = mercadoEstavelRoxas ? 75 : 40;
+  let scoreFluxoTatico = (azuisSeguidasRecentes === 1) ? 70 : 35;
+
+  // Se houver confluência com histórico quente de velas altas, damos um bônus analítico de convergência
+  if (temHistoricoEspelhoQuente && mercadoEstavelRoxas) {
+    scoreRespiroControlado += 12;
+    scoreLimitacaoRoxa += 10;
+  }
 
   let maiorScore = Math.max(scoreRespiroControlado, scoreLimitacaoRoxa, scoreFluxoTatico);
 
-  if (azuisSeguidasRecentes >= 3 || maiorScore < (58 * indiceCeticismo)) {
+  // Critério de recuo se o mercado estiver truncado (muitas azuis seguidas) ou score abaixo do ceticismo
+  if (azuisSeguidasRecentes >= 3 || maiorScore < (60 * indiceCeticismo)) {
     return registrarSinalESair(
       '🛡️ RECUO TÁTICO / OBSERVANDO MESA',
-      `Quebra de padrão detectada (Azuis seguidas: ${azuisSeguidasRecentes}). Recuo estratégico ativado.`,
+      `Fatores desalinhados (Azuis seguidas: ${azuisSeguidasRecentes}). Aguardando confluência limpa.`,
       'N/A',
-      '30%',
+      '32%',
       winRateFormatado,
       'ESPERA',
       'nenhuma',
@@ -85,14 +106,15 @@ function analisarHistorico(historyData) {
     );
   }
 
-  let confiancaFinal = Math.round((maiorScore / indiceCeticismo) * 0.90);
-  confiancaFinal = Math.min(Math.max(confiancaFinal, 35), 89);
+  let confiancaFinal = Math.round((maiorScore / indiceCeticismo) * 0.92);
+  confiancaFinal = Math.min(Math.max(confiancaFinal, 35), 91);
 
+  // Se a confluência e a confiança atingirem o patamar analítico exigido, libera a entrada focada em buscar o alvo tático
   if (confiancaFinal >= 65) {
     return registrarSinalESair(
       '🟢 OPORTUNIDADE TÁTICA IDENTIFICADA',
-      'Padrão comportamental de respiro e limites respeitado na mesa.',
-      '2.00x a 3.50x',
+      'Confluência favorável: padrão comportamental e métricas de mesa alinhados.',
+      '2.00x a 4.00x',
       `${confiancaFinal}%`,
       winRateFormatado,
       'ENTRADA',
@@ -103,7 +125,7 @@ function analisarHistorico(historyData) {
 
   return registrarSinalESair(
     '🟡 AGUARDANDO CONFIRMAÇÃO',
-    'Mercado em observação para nova oportunidade limpa.',
+    'Mesa em observação; aguardando fechamento dos fatores secundários.',
     '1.50x a 2.00x',
     `${confiancaFinal}%`,
     winRateFormatado,
