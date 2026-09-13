@@ -4,8 +4,8 @@
 
 let desempenhoTeorias = {
   teoriaRespiroControlado: { acertos: 5, erros: 2 }, 
-  teoriaLimitacaoRoxa:       { acertos: 5, erros: 2 }, 
-  teoriaFluxoTatico:         { acertos: 5, erros: 2 }  
+  teoriaLimitacaoRoxa:      { acertos: 5, erros: 2 }, 
+  teoriaFluxoTatico:        { acertos: 5, erros: 2 }  
 };
 
 let ultimosSinaisEmitidos = [];
@@ -70,6 +70,17 @@ function analisarHistorico(historyData) {
     else break;
   }
 
+  // Medidor Orgânico de Ruído / Falso Respiro nas últimas 5 rodadas (Avalia a cadência e saltos erráticos)
+  let oscilacoesErraticas = 0;
+  for (let i = 0; i < Math.min(5, historyData.length - 1); i++) {
+    let atual = historyData[i].mult;
+    let proxima = historyData[i+1].mult;
+    // Se há uma alternância brusca e seca entre quebra (<2x) e pico ou vice-versa sem harmonia de transição
+    if ((atual < 2.0 && proxima >= 5.0) || (atual >= 5.0 && proxima < 2.0)) {
+      oscilacoesErraticas++;
+    }
+  }
+
   // Fatores avaliados individualmente (sistema acumulativo, não excludente)
   let temPadraoRespiro = (penultimaVela.mult < 2.0 && ultimaVela.mult >= 2.0 && antepenultimaVela.mult >= 2.0);
   let mercadoEstavelRoxas = (roxasSeguidas <= 4 && azuisSeguidasRecentes <= 2);
@@ -82,6 +93,11 @@ function analisarHistorico(historyData) {
   if (mercadoEstavelRoxas) scoreBase += 15;
   if (temFluxoQuente) scoreBase += 15;
   if (azuisSeguidasRecentes === 1) scoreBase += 10;
+
+  // Penalidade orgânica sutil se houver muita oscilação errática (evita o falso respiro mapeado sem engessar valores)
+  if (oscilacoesErraticas >= 2) {
+    scoreBase -= 18; 
+  }
 
   // Se o mercado estiver travado em muitas azuis seguidas, impõe barreira natural
   if (azuisSeguidasRecentes >= 4) {
