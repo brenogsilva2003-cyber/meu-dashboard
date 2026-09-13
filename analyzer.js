@@ -1,5 +1,5 @@
 /**
- * Motor Avançado de Análise Preditiva - Com Recuo Tático Rápido e Anti-Roxa Enganadora
+ * Motor Avançado de Análise Preditiva - Com Pressão Azul Proporcional e Anti-Falso Alívio
  */
 
 let desempenhoTeorias = {
@@ -57,7 +57,7 @@ function analisarHistorico(historyData) {
   winRateCalculado = Math.min(Math.max(winRateCalculado, 35.0), 90.0);
   const winRateFormatado = `${winRateCalculado.toFixed(1)}%`;
 
-  // --- ANÁLISE DE MESA INTELIGENTE E RÁPIDA ---
+  // --- ANÁLISE DE MESA COM DENSIDADE PROPORCIONAL (SEM ENGESSAMENTO) ---
   let azuisSeguidasRecentes = 0;
   for (let item of historyData) {
     if (item.mult < 2.0) azuisSeguidasRecentes++;
@@ -70,11 +70,15 @@ function analisarHistorico(historyData) {
     else break;
   }
 
-  // Contagem de azuis nas últimas 6 rodadas (pega o contexto geral e não só a ponta)
-  let totalAzuisCurtasRecentes = historyData.slice(0, 6).filter(i => i.mult < 2.0).length;
+  // Avaliação proporcional do bloco recente (janela flexível de análise de peso)
+  let janelaRecente = historyData.slice(0, 7);
+  let quantidadeAzuisJanela = janelaRecente.filter(i => i.mult < 2.0).length;
+  let proporcaoAzuis = quantidadeAzuisJanela / janelaRecente.length; // Mede o percentual de poluição da mesa
 
-  // Detector de "Roxa Enganadora" (Uma roxa fraca logo no meio de um aglomerado forte de azuis)
-  let roxaEnganadoraRecente = (ultimaVela.mult >= 2.0 && ultimaVela.mult < 3.0 && totalAzuisCurtasRecentes >= 4);
+  // Detecção orgânica de "Falso Alívio" (Roxa fraca isolada no meio de um ambiente majoritariamente azul)
+  let ehRoxaFraca = (ultimaVela.mult >= 2.0 && ultimaVela.mult < 3.2);
+  let ambientePoluido = proporcaoAzuis >= 0.55; // Se mais de 55% das últimas velas foram azuis, o ambiente está pesado
+  let falsoAlivioDetectado = (ehRoxaFraca && ambientePoluido);
 
   // Detector de oscilação errática / ruído pesado
   let oscilacoesErraticas = 0;
@@ -86,11 +90,11 @@ function analisarHistorico(historyData) {
     }
   }
 
-  // Se o robô identificar muitas azuis recentes OU uma roxa enganadora, aciona o RECUO TÁTICO RAPIDAMENTE
-  if (azuisSeguidasRecentes >= 3 || totalAzuisCurtasRecentes >= 4 || roxaEnganadoraRecente) {
+  // RECUO TÁTICO PROPORCIONAL: Se a mesa estiver muito azulada ou rosnando falso alívio, recua sem travas rígidas de contagem
+  if (azuisSeguidasRecentes >= 3 || ambientePoluido || falsoAlivioDetectado) {
     return registrarSinalESair(
       '🛡️ RECUO TÁTICO / OBSERVANDO MESA',
-      `Mesa pesada ou armadilha detectada (Azuis densas: ${totalAzuisCurtasRecentes}/6). Recuo preventivo ativado.`,
+      `Ambiente com alta densidade de azuis (${Math.round(proporcaoAzuis * 100)}%) ou falso alívio detectado. Recuo preventivo.`,
       'N/A',
       '25%',
       winRateFormatado,
@@ -100,7 +104,7 @@ function analisarHistorico(historyData) {
     );
   }
 
-  // Fatores de oportunidade real
+  // Fatores de oportunidade real (comportamento limpo)
   let temPadraoRespiro = (penultimaVela.mult < 2.0 && ultimaVela.mult >= 2.0 && antepenultimaVela.mult >= 2.0);
   let mercadoEstavelRoxas = (roxasSeguidas <= 4 && azuisSeguidasRecentes <= 2);
   let rosasRecentesNoHistorico = historyData.slice(0, 15).filter(i => i.mult >= 10).length;
