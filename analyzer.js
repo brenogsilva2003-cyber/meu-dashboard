@@ -1,5 +1,5 @@
 /**
- * Motor Avançado de Análise Preditiva - Com Pressão Azul Proporcional e Anti-Falso Alívio
+ * Motor Avançado de Análise Preditiva - Com Leitura de Ciclos, Quebra de Contexto e Fluidez Humana
  */
 
 let desempenhoTeorias = {
@@ -37,13 +37,13 @@ function analisarHistorico(historyData) {
     if (deuBomUltimaRodada) {
       desempenhoTeorias[ultimoSinal.teoriaUsada].acertos++;
       if (foiVelaAltaUltima) {
-        indiceCeticismo = Math.min(1.10, indiceCeticismo + 0.03); 
+        indiceCeticismo = Math.min(1.15, indiceCeticismo + 0.04); // Respiro maior pós-pico (fim de ciclo natural)
       } else {
         indiceCeticismo = Math.max(0.85, indiceCeticismo - 0.05);
       }
     } else {
       desempenhoTeorias[ultimoSinal.teoriaUsada].erros++;
-      indiceCeticismo = Math.min(1.25, indiceCeticismo + 0.08); 
+      indiceCeticismo = Math.min(1.30, indiceCeticismo + 0.09); 
     }
   }
 
@@ -57,46 +57,34 @@ function analisarHistorico(historyData) {
   winRateCalculado = Math.min(Math.max(winRateCalculado, 35.0), 90.0);
   const winRateFormatado = `${winRateCalculado.toFixed(1)}%`;
 
-  // --- ANÁLISE DE MESA COM DENSIDADE PROPORCIONAL (SEM ENGESSAMENTO) ---
+  // --- ANÁLISE DE CICLOS E QUEBRA DE CONTEXTO ---
   let azuisSeguidasRecentes = 0;
   for (let item of historyData) {
     if (item.mult < 2.0) azuisSeguidasRecentes++;
     else break;
   }
 
-  let roxasSeguidas = 0;
-  for (let item of historyData) {
-    if (item.mult >= 2.0 && item.mult < 10) roxasSeguidas++;
-    else break;
-  }
+  // Identifica se a última rodada foi um pico expressivo (Fim de Ciclo / Exaustão da Mesa)
+  let acabouDeDarPicoAlto = (penultimaVela.mult >= 15.0 || antepenultimaVela.mult >= 15.0);
 
-  // Avaliação proporcional do bloco recente (janela flexível de análise de peso)
-  let janelaRecente = historyData.slice(0, 7);
+  // Identifica quebra de padrão orgânica (Ex: Logo após um momento bom, vem uma azul traiçoeira que quebra a cadência)
+  let quebraDePadraoRecente = (penultimaVela.mult >= 10.0 && ultimaVela.mult < 2.0) || 
+                              (azuisSeguidasRecentes >= 2 && penultimaVela.mult < 2.0);
+
+  // Percentual de poluição do ambiente recente
+  let janelaRecente = historyData.slice(0, 6);
   let quantidadeAzuisJanela = janelaRecente.filter(i => i.mult < 2.0).length;
-  let proporcaoAzuis = quantidadeAzuisJanela / janelaRecente.length; // Mede o percentual de poluição da mesa
+  let proporcaoAzuis = quantidadeAzuisJanela / janelaRecente.length;
+  let ambientePoluido = proporcaoAzuis >= 0.55;
 
-  // Detecção orgânica de "Falso Alívio" (Roxa fraca isolada no meio de um ambiente majoritariamente azul)
-  let ehRoxaFraca = (ultimaVela.mult >= 2.0 && ultimaVela.mult < 3.2);
-  let ambientePoluido = proporcaoAzuis >= 0.55; // Se mais de 55% das últimas velas foram azuis, o ambiente está pesado
-  let falsoAlivioDetectado = (ehRoxaFraca && ambientePoluido);
-
-  // Detector de oscilação errática / ruído pesado
-  let oscilacoesErraticas = 0;
-  for (let i = 0; i < Math.min(5, historyData.length - 1); i++) {
-    let atual = historyData[i].mult;
-    let proxima = historyData[i+1].mult;
-    if ((atual < 2.0 && proxima >= 5.0) || (atual >= 5.0 && proxima < 2.0)) {
-      oscilacoesErraticas++;
-    }
-  }
-
-  // RECUO TÁTICO PROPORCIONAL: Se a mesa estiver muito azulada ou rosnando falso alívio, recua sem travas rígidas de contagem
-  if (azuisSeguidasRecentes >= 3 || ambientePoluido || falsoAlivioDetectado) {
+  // RECUO TÁTICO POR FIM DE CICLO OU QUEBRA DE VALIDADE:
+  // Se a mesa acabou de pagar um pico alto (ex: 20x+) e desandou, ou se o padrão quebrou, o robô entende que o ciclo expirou.
+  if (acabouDeDarPicoAlto || quebraDePadraoRecente || ambientePoluido) {
     return registrarSinalESair(
-      '🛡️ RECUO TÁTICO / OBSERVANDO MESA',
-      `Ambiente com alta densidade de azuis (${Math.round(proporcaoAzuis * 100)}%) ou falso alívio detectado. Recuo preventivo.`,
+      '🛡️ RECUO TÁTICO / FIM DE CICLO',
+      `Ciclo anterior encerrado (pico recente ou quebra de cadência identificada). Aguardando nova estrutura.`,
       'N/A',
-      '25%',
+      '20%',
       winRateFormatado,
       'ESPERA',
       'nenhuma',
@@ -104,29 +92,24 @@ function analisarHistorico(historyData) {
     );
   }
 
-  // Fatores de oportunidade real (comportamento limpo)
+  // Fatores de oportunidade limpa para um NOVO ciclo
   let temPadraoRespiro = (penultimaVela.mult < 2.0 && ultimaVela.mult >= 2.0 && antepenultimaVela.mult >= 2.0);
-  let mercadoEstavelRoxas = (roxasSeguidas <= 4 && azuisSeguidasRecentes <= 2);
   let rosasRecentesNoHistorico = historyData.slice(0, 15).filter(i => i.mult >= 10).length;
   let temFluxoQuente = rosasRecentesNoHistorico >= 1; 
 
-  let scoreBase = 50;
-  if (temPadraoRespiro) scoreBase += 20;
-  if (mercadoEstavelRoxas) scoreBase += 15;
-  if (temFluxoQuente) scoreBase += 15;
-  if (azuisSeguidasRecentes === 1) scoreBase += 10;
-
-  if (oscilacoesErraticas >= 2) {
-    scoreBase -= 20; 
-  }
+  let scoreBase = 45;
+  if (temPadraoRespiro) scoreBase += 25;
+  if (temFluxoQuente) scoreBase += 20;
+  if (azuisSeguidasRecentes === 0 || azuisSeguidasRecentes === 1) scoreBase += 15;
 
   let confiancaFinal = Math.round((scoreBase / indiceCeticismo) * 0.95);
-  confiancaFinal = Math.min(Math.max(confiancaFinal, 35), 92);
+  confiancaFinal = Math.min(Math.max(confiancaFinal, 30), 92);
 
-  if (confiancaFinal >= 65) {
+  // Libera entrada apenas se houver harmonia real no novo ciclo
+  if (confiancaFinal >= 65 && !ambientePoluido) {
     return registrarSinalESair(
       '🟢 OPORTUNIDADE TÁTICA IDENTIFICADA',
-      'Conjunto limpo de fatores e fluxo dinâmico confirmado.',
+      'Novo ciclo estruturado e harmônico detectado na mesa.',
       '2.00x a 4.00x',
       `${confiancaFinal}%`,
       winRateFormatado,
@@ -137,8 +120,8 @@ function analisarHistorico(historyData) {
   }
 
   return registrarSinalESair(
-    '🟡 AGUARDANDO CONFIRMAÇÃO',
-    'Mesa em transição; aguardando melhor alinhamento dinâmico.',
+    '🟡 AGUARDANDO NOVO CICLO',
+    'Mesa em transição pós-movimento; aguardando desenho de nova oportunidade.',
     '1.50x a 2.00x',
     `${confiancaFinal}%`,
     winRateFormatado,
