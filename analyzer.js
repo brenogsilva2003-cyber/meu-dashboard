@@ -1,5 +1,5 @@
 /**
- * Motor Avançado de Análise Preditiva - Com Sistema de Pesos Flexíveis e Confluência Orgânica
+ * Motor Avançado de Análise Preditiva - Com Recuo Tático Rápido e Anti-Roxa Enganadora
  */
 
 let desempenhoTeorias = {
@@ -37,7 +37,7 @@ function analisarHistorico(historyData) {
     if (deuBomUltimaRodada) {
       desempenhoTeorias[ultimoSinal.teoriaUsada].acertos++;
       if (foiVelaAltaUltima) {
-        indiceCeticismo = Math.min(1.10, indiceCeticismo + 0.03); // Respiro leve pós-pico
+        indiceCeticismo = Math.min(1.10, indiceCeticismo + 0.03); 
       } else {
         indiceCeticismo = Math.max(0.85, indiceCeticismo - 0.05);
       }
@@ -57,7 +57,7 @@ function analisarHistorico(historyData) {
   winRateCalculado = Math.min(Math.max(winRateCalculado, 35.0), 90.0);
   const winRateFormatado = `${winRateCalculado.toFixed(1)}%`;
 
-  // --- ANÁLISE DE MESA COM PESOS FLEXÍVEIS ---
+  // --- ANÁLISE DE MESA INTELIGENTE E RÁPIDA ---
   let azuisSeguidasRecentes = 0;
   for (let item of historyData) {
     if (item.mult < 2.0) azuisSeguidasRecentes++;
@@ -70,42 +70,29 @@ function analisarHistorico(historyData) {
     else break;
   }
 
-  // Medidor Orgânico de Ruído / Falso Respiro nas últimas 5 rodadas (Avalia a cadência e saltos erráticos)
+  // Contagem de azuis nas últimas 6 rodadas (pega o contexto geral e não só a ponta)
+  let totalAzuisCurtasRecentes = historyData.slice(0, 6).filter(i => i.mult < 2.0).length;
+
+  // Detector de "Roxa Enganadora" (Uma roxa fraca logo no meio de um aglomerado forte de azuis)
+  let roxaEnganadoraRecente = (ultimaVela.mult >= 2.0 && ultimaVela.mult < 3.0 && totalAzuisCurtasRecentes >= 4);
+
+  // Detector de oscilação errática / ruído pesado
   let oscilacoesErraticas = 0;
   for (let i = 0; i < Math.min(5, historyData.length - 1); i++) {
     let atual = historyData[i].mult;
     let proxima = historyData[i+1].mult;
-    // Se há uma alternância brusca e seca entre quebra (<2x) e pico ou vice-versa sem harmonia de transição
     if ((atual < 2.0 && proxima >= 5.0) || (atual >= 5.0 && proxima < 2.0)) {
       oscilacoesErraticas++;
     }
   }
 
-  // Fatores avaliados individualmente (sistema acumulativo, não excludente)
-  let temPadraoRespiro = (penultimaVela.mult < 2.0 && ultimaVela.mult >= 2.0 && antepenultimaVela.mult >= 2.0);
-  let mercadoEstavelRoxas = (roxasSeguidas <= 4 && azuisSeguidasRecentes <= 2);
-  let rosasRecentesNoHistorico = historyData.slice(0, 15).filter(i => i.mult >= 10).length;
-  let temFluxoQuente = rosasRecentesNoHistorico >= 1; // Basta haver indício recente de força na mesa
-
-  // Pontuação base flexível
-  let scoreBase = 50;
-  if (temPadraoRespiro) scoreBase += 20;
-  if (mercadoEstavelRoxas) scoreBase += 15;
-  if (temFluxoQuente) scoreBase += 15;
-  if (azuisSeguidasRecentes === 1) scoreBase += 10;
-
-  // Penalidade orgânica sutil se houver muita oscilação errática (evita o falso respiro mapeado sem engessar valores)
-  if (oscilacoesErraticas >= 2) {
-    scoreBase -= 18; 
-  }
-
-  // Se o mercado estiver travado em muitas azuis seguidas, impõe barreira natural
-  if (azuisSeguidasRecentes >= 4) {
+  // Se o robô identificar muitas azuis recentes OU uma roxa enganadora, aciona o RECUO TÁTICO RAPIDAMENTE
+  if (azuisSeguidasRecentes >= 3 || totalAzuisCurtasRecentes >= 4 || roxaEnganadoraRecente) {
     return registrarSinalESair(
       '🛡️ RECUO TÁTICO / OBSERVANDO MESA',
-      `Sequência excessiva de velas azuis (${azuisSeguidasRecentes}). Recuo preventivo ativado.`,
+      `Mesa pesada ou armadilha detectada (Azuis densas: ${totalAzuisCurtasRecentes}/6). Recuo preventivo ativado.`,
       'N/A',
-      '30%',
+      '25%',
       winRateFormatado,
       'ESPERA',
       'nenhuma',
@@ -113,14 +100,29 @@ function analisarHistorico(historyData) {
     );
   }
 
+  // Fatores de oportunidade real
+  let temPadraoRespiro = (penultimaVela.mult < 2.0 && ultimaVela.mult >= 2.0 && antepenultimaVela.mult >= 2.0);
+  let mercadoEstavelRoxas = (roxasSeguidas <= 4 && azuisSeguidasRecentes <= 2);
+  let rosasRecentesNoHistorico = historyData.slice(0, 15).filter(i => i.mult >= 10).length;
+  let temFluxoQuente = rosasRecentesNoHistorico >= 1; 
+
+  let scoreBase = 50;
+  if (temPadraoRespiro) scoreBase += 20;
+  if (mercadoEstavelRoxas) scoreBase += 15;
+  if (temFluxoQuente) scoreBase += 15;
+  if (azuisSeguidasRecentes === 1) scoreBase += 10;
+
+  if (oscilacoesErraticas >= 2) {
+    scoreBase -= 20; 
+  }
+
   let confiancaFinal = Math.round((scoreBase / indiceCeticismo) * 0.95);
   confiancaFinal = Math.min(Math.max(confiancaFinal, 35), 92);
 
-  // Se a pontuação flexível atingir o patamar, libera a entrada com fluidez
-  if (confiancaFinal >= 62) {
+  if (confiancaFinal >= 65) {
     return registrarSinalESair(
       '🟢 OPORTUNIDADE TÁTICA IDENTIFICADA',
-      'Conjunto favorável de fatores e comportamento dinâmico detectado na mesa.',
+      'Conjunto limpo de fatores e fluxo dinâmico confirmado.',
       '2.00x a 4.00x',
       `${confiancaFinal}%`,
       winRateFormatado,
@@ -142,7 +144,6 @@ function analisarHistorico(historyData) {
   );
 }
 
-// Cálculo focado nas novas faixas solicitadas
 function calcularEstatisticasFaixas(historyData) {
   let resultado = {
     faixa10_50: { velas: '-', tempo: 'Nenhum' },
@@ -156,18 +157,10 @@ function calcularEstatisticasFaixas(historyData) {
   let idx100 = historyData.findIndex(i => i.mult >= 100 && i.mult < 1000);
   let idx1000 = historyData.findIndex(i => i.mult >= 1000);
 
-  if (idx10 !== -1) {
-    resultado.faixa10_50 = { velas: idx10, tempo: estimarTempo(idx10) };
-  }
-  if (idx50 !== -1) {
-    resultado.faixa50_100 = { velas: idx50, tempo: estimarTempo(idx50) };
-  }
-  if (idx100 !== -1) {
-    resultado.faixa100_999 = { velas: idx100, tempo: estimarTempo(idx100) };
-  }
-  if (idx1000 !== -1) {
-    resultado.faixa1000 = { velas: idx1000, tempo: estimarTempo(idx1000) };
-  }
+  if (idx10 !== -1) resultado.faixa10_50 = { velas: idx10, tempo: estimarTempo(idx10) };
+  if (idx50 !== -1) resultado.faixa50_100 = { velas: idx50, tempo: estimarTempo(idx50) };
+  if (idx100 !== -1) resultado.faixa100_999 = { velas: idx100, tempo: estimarTempo(idx100) };
+  if (idx1000 !== -1) resultado.faixa1000 = { velas: idx1000, tempo: estimarTempo(idx1000) };
 
   return resultado;
 }
