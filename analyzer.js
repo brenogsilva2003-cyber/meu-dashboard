@@ -1,5 +1,5 @@
 /**
- * Motor Avançado de Análise Preditiva - Com Rótulos de Feedback Visual para o Histórico (Apenas Entradas Ativas)
+ * Motor Avançado de Análise Preditiva - Com Separação Clara entre Oportunidade (Entrada) e Espera (Passivo)
  */
 
 let desempenhoTeorias = {
@@ -23,7 +23,7 @@ function analisarHistorico(historyData) {
       taxaAcerto: '0.0%',
       estatisticasFaixas: calcularEstatisticasFaixas(historyData || []),
       reflexaoHumana: 'Aguardando massa crítica de dados para iniciar autocrítica.',
-      historicoComFeedback: historyData // Retorna cru enquanto não há massa
+      historicoComFeedback: historyData 
     };
   }
 
@@ -134,14 +134,15 @@ function analisarHistorico(historyData) {
     );
   }
 
+  // AGORA PASSIVO: Aguardando novo ciclo agora é ESPERA pura, sem alvo inventado
   return registrarSinalESair(
     '🟡 AGUARDANDO NOVO CICLO',
     'Mesa em transição pós-movimento; aguardando desenho de nova oportunidade.',
-    '1.50x a 2.00x',
+    'N/A',
     `${confiancaFinal}%`,
     winRateFormatado,
-    'ENTRADA',
-    'teoriaRespiroControlado',
+    'ESPERA', // Alterado para ESPERA para não gerar contorno nem falsa recomendação
+    'nenhuma',
     historyData,
     reflexaoAtual
   );
@@ -179,28 +180,24 @@ function estimarTempo(qtdVelas) {
 }
 
 function registrarSinalESair(sinal, motivo, alvo, confianca, taxaAcerto, tipoAcao, teoriaUsada, historyData, reflexaoHumana) {
-  // Registra o sinal atual antes de empurrar para o histórico de controle
   ultimosSinaisEmitidos.push({ tipoAcao, teoriaUsada, timestamp: Date.now() });
   if (ultimosSinaisEmitidos.length > 15) ultimosSinaisEmitidos.shift();
 
-  // --- ATRIBUINDO FEEDBACK VISUAL RESTRITO A ENTRADAS ---
+  // Atribui feedback visual restrito estritamente a entradas ativas
   let historyComFeedback = historyData.map((vela, index) => {
     let velaEnriquecida = { ...vela, statusFeedback: 'neutro' };
 
-    // O índice 0 no histórico representa a vela imediatamente anterior (a que acabou de fechar).
-    // Se no exato momento daquela rodada o bot havia emitido uma ENTRADA, nós avaliamos se ela deu bom ou ruim.
-    // Como 'ultimosSinaisEmitidos' armazena as ações passadas, mapeamos pelo deslocamento correto do índice:
     const indiceSinalCorrespondente = ultimosSinaisEmitidos.length - 1 - index;
     
     if (indiceSinalCorrespondente >= 0 && indiceSinalCorrespondente < ultimosSinaisEmitidos.length) {
       const acaoPassada = ultimosSinaisEmitidos[indiceSinalCorrespondente];
       
-      // Contorna SOMENTE se a ação foi ENTRADA
+      // Contorna SOMENTE se a ação foi ENTRADA real
       if (acaoPassada && acaoPassada.tipoAcao === 'ENTRADA') {
         if (vela.mult >= 2.00) {
-          velaEnriquecida.statusFeedback = 'acerto'; // Verde se o alvo de entrada bateu
+          velaEnriquecida.statusFeedback = 'acerto'; 
         } else {
-          velaEnriquecida.statusFeedback = 'erro';   // Vermelho se a entrada quebrou (azul)
+          velaEnriquecida.statusFeedback = 'erro';   
         }
       }
     }
