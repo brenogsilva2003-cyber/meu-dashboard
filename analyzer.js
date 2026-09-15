@@ -1,5 +1,5 @@
 /**
- * Motor Avançado de Análise Preditiva - Com Separação Clara entre Oportunidade (Entrada) e Espera (Passivo)
+ * Motor Avançado de Análise Preditiva - Com Vinculação Rígida de Feedback por Vela
  */
 
 let desempenhoTeorias = {
@@ -94,55 +94,48 @@ function analisarHistorico(historyData) {
   let proporcaoAzuis = quantidadeAzuisJanela / janelaRecente.length;
   let ambientePoluido = proporcaoAzuis >= 0.55;
 
+  let acaoDecidida = 'ENTRADA';
+  let teoriaUtilizada = 'teoriaRespiroControlado';
+  let sinalTexto = '🟢 OPORTUNIDADE TÁTICA IDENTIFICADA';
+  let motivoTexto = 'Novo ciclo estruturado e harmônico detectado na mesa.';
+  let alvoTexto = '2.00x a 4.00x';
+
   if (acabouDeDarPicoAlto || quebraDePadraoRecente || ambientePoluido) {
-    return registrarSinalESair(
-      '🛡️ RECUO TÁTICO / FIM DE CICLO',
-      `Ciclo anterior encerrado (pico recente ou quebra de cadência identificada).`,
-      'N/A',
-      '20%',
-      winRateFormatado,
-      'ESPERA',
-      'nenhuma',
-      historyData,
-      reflexaoAtual
-    );
+    acaoDecidida = 'ESPERA';
+    teoriaUtilizada = 'nenhuma';
+    sinalTexto = '🛡️ RECUO TÁTICO / FIM DE CICLO';
+    motivoTexto = 'Ciclo anterior encerrado (pico recente ou quebra de cadência identificada).';
+    alvoTexto = 'N/A';
+  } else {
+    let temPadraoRespiro = (penultimaVela.mult < 2.0 && ultimaVela.mult >= 2.0 && antepenultimaVela.mult >= 2.0);
+    let rosasRecentesNoHistorico = historyData.slice(0, 15).filter(i => i.mult >= 10).length;
+    let temFluxoQuente = rosasRecentesNoHistorico >= 1; 
+
+    let scoreBase = 45;
+    if (temPadraoRespiro) scoreBase += 25;
+    if (temFluxoQuente) scoreBase += 20;
+    if (azuisSeguidasRecentes === 0 || azuisSeguidasRecentes === 1) scoreBase += 15;
+
+    let confiancaFinal = Math.round((scoreBase / indiceCeticismo) * 0.95);
+    confiancaFinal = Math.min(Math.max(confiancaFinal, 30), 92);
+
+    if (confiancaFinal < 65 || ambientePoluido) {
+      acaoDecidida = 'ESPERA';
+      teoriaUtilizada = 'nenhuma';
+      sinalTexto = '🟡 AGUARDANDO NOVO CICLO';
+      motivoTexto = 'Mesa em transição pós-movimento; aguardando desenho de nova oportunidade.';
+      alvoTexto = 'N/A';
+    }
   }
 
-  let temPadraoRespiro = (penultimaVela.mult < 2.0 && ultimaVela.mult >= 2.0 && antepenultimaVela.mult >= 2.0);
-  let rosasRecentesNoHistorico = historyData.slice(0, 15).filter(i => i.mult >= 10).length;
-  let temFluxoQuente = rosasRecentesNoHistorico >= 1; 
-
-  let scoreBase = 45;
-  if (temPadraoRespiro) scoreBase += 25;
-  if (temFluxoQuente) scoreBase += 20;
-  if (azuisSeguidasRecentes === 0 || azuisSeguidasRecentes === 1) scoreBase += 15;
-
-  let confiancaFinal = Math.round((scoreBase / indiceCeticismo) * 0.95);
-  confiancaFinal = Math.min(Math.max(confiancaFinal, 30), 92);
-
-  if (confiancaFinal >= 65 && !ambientePoluido) {
-    return registrarSinalESair(
-      '🟢 OPORTUNIDADE TÁTICA IDENTIFICADA',
-      'Novo ciclo estruturado e harmônico detectado na mesa.',
-      '2.00x a 4.00x',
-      `${confiancaFinal}%`,
-      winRateFormatado,
-      'ENTRADA',
-      'teoriaRespiroControlado',
-      historyData,
-      reflexaoAtual
-    );
-  }
-
-  // AGORA PASSIVO: Aguardando novo ciclo agora é ESPERA pura, sem alvo inventado
   return registrarSinalESair(
-    '🟡 AGUARDANDO NOVO CICLO',
-    'Mesa em transição pós-movimento; aguardando desenho de nova oportunidade.',
-    'N/A',
-    `${confiancaFinal}%`,
+    sinalTexto,
+    motivoTexto,
+    alvoTexto,
+    '75%',
     winRateFormatado,
-    'ESPERA', // Alterado para ESPERA para não gerar contorno nem falsa recomendação
-    'nenhuma',
+    acaoDecidida,
+    teoriaUtilizada,
     historyData,
     reflexaoAtual
   );
@@ -180,24 +173,33 @@ function estimarTempo(qtdVelas) {
 }
 
 function registrarSinalESair(sinal, motivo, alvo, confianca, taxaAcerto, tipoAcao, teoriaUsada, historyData, reflexaoHumana) {
-  ultimosSinaisEmitidos.push({ tipoAcao, teoriaUsada, timestamp: Date.now() });
-  if (ultimosSinaisEmitidos.length > 15) ultimosSinaisEmitidos.shift();
+  // REGRA DE CORREÇÃO TEMPORAL:
+  // O sinal decidido AGORA (neste exato milissegundo em que a vela 0 acabou de fechar) 
+  // é uma recomendação para a PRÓXIMA vela que vai nascer. 
+  // Portanto, para avaliarmos o acerto/erro das velas que JÁ PASSARAM, 
+  // precisamos empurrar a intenção da rodada anterior para a vela 1 do histórico!
 
-  // Atribui feedback visual restrito estritamente a entradas ativas
+  ultimosSinaisEmitidos.push({ tipoAcao, teoriaUsada, timestamp: Date.now() });
+  if (ultimosSinaisEmitidos.length > 20) ultimosSinaisEmitidos.shift();
+
+  // Mapeia o histórico associando rigorosamente a intenção ao momento correto da vela executada
   let historyComFeedback = historyData.map((vela, index) => {
     let velaEnriquecida = { ...vela, statusFeedback: 'neutro' };
 
-    const indiceSinalCorrespondente = ultimosSinaisEmitidos.length - 1 - index;
-    
-    if (indiceSinalCorrespondente >= 0 && indiceSinalCorrespondente < ultimosSinaisEmitidos.length) {
-      const acaoPassada = ultimosSinaisEmitidos[indiceSinalCorrespondente];
-      
-      // Contorna SOMENTE se a ação foi ENTRADA real
-      if (acaoPassada && acaoPassada.tipoAcao === 'ENTRADA') {
+    // index 0 é a vela que acabou de fechar agora. 
+    // A recomendação que gerou a aposta para esta vela 0 foi emitida na rodada anterior (index 1 no passado).
+    // Logo, olhamos o sinal emitido na posição "ultimosSinaisEmitidos.length - 2 - index"
+    const indiceSinalReal = ultimosSinaisEmitidos.length - 2 - index;
+
+    if (indiceSinalReal >= 0 && indiceSinalReal < ultimosSinaisEmitidos.length) {
+      const acaoAplicadaNessaVela = ultimosSinaisEmitidos[indiceSinalReal];
+
+      // Se o robô recomendou ENTRADA quando essa vela foi aberta, avaliamos o resultado dela
+      if (acaoAplicadaNessaVela && acaoAplicadaNessaVela.tipoAcao === 'ENTRADA') {
         if (vela.mult >= 2.00) {
-          velaEnriquecida.statusFeedback = 'acerto'; 
+          velaEnriquecida.statusFeedback = 'acerto'; // Bateu o alvo de 2.00x+
         } else {
-          velaEnriquecida.statusFeedback = 'erro';   
+          velaEnriquecida.statusFeedback = 'erro';   // Quebrou abaixo de 2.00x (azul)
         }
       }
     }
