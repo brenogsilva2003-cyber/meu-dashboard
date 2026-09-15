@@ -1,5 +1,5 @@
 /**
- * Motor Avançado de Análise Preditiva - Com Vinculação Rígida de Feedback por Vela
+ * Motor Avançado de Análise Preditiva - Com Persistência Permanente de Feedback nas Velas
  */
 
 let desempenhoTeorias = {
@@ -173,38 +173,35 @@ function estimarTempo(qtdVelas) {
 }
 
 function registrarSinalESair(sinal, motivo, alvo, confianca, taxaAcerto, tipoAcao, teoriaUsada, historyData, reflexaoHumana) {
-  // REGRA DE CORREÇÃO TEMPORAL:
-  // O sinal decidido AGORA (neste exato milissegundo em que a vela 0 acabou de fechar) 
-  // é uma recomendação para a PRÓXIMA vela que vai nascer. 
-  // Portanto, para avaliarmos o acerto/erro das velas que JÁ PASSARAM, 
-  // precisamos empurrar a intenção da rodada anterior para a vela 1 do histórico!
-
+  // Registra o sinal atual na pilha de controle
   ultimosSinaisEmitidos.push({ tipoAcao, teoriaUsada, timestamp: Date.now() });
-  if (ultimosSinaisEmitidos.length > 20) ultimosSinaisEmitidos.shift();
+  if (ultimosSinaisEmitidos.length > 30) ultimosSinaisEmitidos.shift();
 
-  // Mapeia o histórico associando rigorosamente a intenção ao momento correto da vela executada
-  let historyComFeedback = historyData.map((vela, index) => {
-    let velaEnriquecida = { ...vela, statusFeedback: 'neutro' };
-
-    // index 0 é a vela que acabou de fechar agora. 
-    // A recomendação que gerou a aposta para esta vela 0 foi emitida na rodada anterior (index 1 no passado).
-    // Logo, olhamos o sinal emitido na posição "ultimosSinaisEmitidos.length - 2 - index"
-    const indiceSinalReal = ultimosSinaisEmitidos.length - 2 - index;
-
-    if (indiceSinalReal >= 0 && indiceSinalReal < ultimosSinaisEmitidos.length) {
-      const acaoAplicadaNessaVela = ultimosSinaisEmitidos[indiceSinalReal];
-
-      // Se o robô recomendou ENTRADA quando essa vela foi aberta, avaliamos o resultado dela
-      if (acaoAplicadaNessaVela && acaoAplicadaNessaVela.tipoAcao === 'ENTRADA') {
-        if (vela.mult >= 2.00) {
-          velaEnriquecida.statusFeedback = 'acerto'; // Bateu o alvo de 2.00x+
-        } else {
-          velaEnriquecida.statusFeedback = 'erro';   // Quebrou abaixo de 2.00x (azul)
-        }
+  // ATRIBUIÇÃO PERMANENTE:
+  // Se a vela mais recente (historyData[0]) foi gerada logo após um sinal de ENTRADA, 
+  // gravamos o status de feedback diretamente no objeto dela para que nunca mais se perca ou mude de lugar.
+  if (historyData.length > 1) {
+    // Pegamos a intenção que existia na rodada anterior para a vela 0 atual
+    const sinalAnterior = ultimosSinaisEmitidos[ultimosSinaisEmitidos.length - 2];
+    
+    if (sinalAnterior && sinalAnterior.tipoAcao === 'ENTRADA') {
+      // Só define se ela ainda não tiver um feedback gravado
+      if (!historyData[0].statusFeedback || historyData[0].statusFeedback === 'neutro') {
+        historyData[0].statusFeedback = historyData[0].mult >= 2.00 ? 'acerto' : 'erro';
+      }
+    } else {
+      if (!historyData[0].statusFeedback) {
+        historyData[0].statusFeedback = 'neutro';
       }
     }
+  }
 
-    return velaEnriquecida;
+  // Mapeia todo o histórico garantindo que velas antigas mantenham seus contornos salvos
+  let historyComFeedback = historyData.map((vela) => {
+    return {
+      ...vela,
+      statusFeedback: vela.statusFeedback || 'neutro'
+    };
   });
 
   return {
