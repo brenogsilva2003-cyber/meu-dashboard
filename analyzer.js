@@ -1,5 +1,5 @@
 /**
- * Motor Avançado de Análise Preditiva - Com Leitura de Ciclos, Quebra de Contexto e Fluidez Humana
+ * Motor Avançado de Análise Preditiva - Com Leitura de Ciclos, Quebra de Contexto e Autocrítica Humana
  */
 
 let desempenhoTeorias = {
@@ -11,6 +11,9 @@ let desempenhoTeorias = {
 let ultimosSinaisEmitidos = [];
 let indiceCeticismo = 1.0; 
 
+// Registro de reflexões/experiências passadas para o "aprendizado humano" do bot
+let historicoReflexoes = [];
+
 function analisarHistorico(historyData) {
   if (!historyData || historyData.length < 25) {
     return {
@@ -20,7 +23,8 @@ function analisarHistorico(historyData) {
       alvo: 'N/A',
       confianca: '0%',
       taxaAcerto: '0.0%',
-      estatisticasFaixas: calcularEstatisticasFaixas(historyData || [])
+      estatisticasFaixas: calcularEstatisticasFaixas(historyData || []),
+      reflexaoHumana: 'Aguardando massa crítica de dados para iniciar autocrítica.'
     };
   }
 
@@ -30,19 +34,41 @@ function analisarHistorico(historyData) {
   const deuBomUltimaRodada = ultimaVela.mult >= 2.0;
   const foiVelaAltaUltima = ultimaVela.mult >= 10.0;
 
-  // Ajuste dinâmico do ceticismo de forma suave
+  // --- O "APRENDIZADO HUMANO" E AUTOCRÍTICA DE EXPERIÊNCIAS ANTERIORES ---
+  let reflexaoAtual = 'Analisando fluxo natural da mesa...';
+  
   if (ultimosSinaisEmitidos.length > 0) {
     const ultimoSinal = ultimosSinaisEmitidos[ultimosSinaisEmitidos.length - 1];
     
+    if (ultimoSinal.tipoAcao === 'ENTRADA') {
+      if (deuBomUltimaRodada) {
+        desempenhoTeorias[ultimoSinal.teoriaUsada].acertos++;
+        reflexaoAtual = `💡 Autocrítica Positiva: Entrada validada! O alvo de 2.00x+ bateu (${ultimaVela.mult}x). Estrutura correta.`;
+      } else {
+        desempenhoTeorias[ultimoSinal.teoriaUsada].erros++;
+        reflexaoAtual = `⚠️ Autocrítica de Erro: Fui induzido ao erro na entrada (${ultimaVela.mult}x). O padrão quebrou a cadência esperada. Ajustando ceticismo.`;
+      }
+    } else if (ultimoSinal.tipoAcao === 'ESPERA') {
+      // Analisando se o bot foi prudente ou perdeu oportunidade (Oportunidade Perdida / Recuo Correto)
+      if (deuBomUltimaRodada) {
+        reflexaoAtual = `🧠 Reflexão Tática: Fiquei de fora por recuo prudente, mas a vela pagou ${ultimaVela.mult}x. Oportunidade escapou, mantendo cautela no próximo ciclo.`;
+      } else {
+        reflexaoAtual = `🛡️ Reflexão Tática: Excelente leitura! Evitei um ciclo poluído com vela baixa (${ultimaVela.mult}x) através do recuo tático.`;
+      }
+    }
+
+    // Guarda na memória reflexiva recente (máximo 10 reflexões)
+    historicoReflexoes.push({ rodada: historyData.length, texto: reflexaoAtual });
+    if (historicoReflexoes.length > 10) historicoReflexoes.shift();
+
+    // Ajuste dinâmico do ceticismo com base no acerto/erro
     if (deuBomUltimaRodada) {
-      desempenhoTeorias[ultimoSinal.teoriaUsada].acertos++;
       if (foiVelaAltaUltima) {
-        indiceCeticismo = Math.min(1.15, indiceCeticismo + 0.04); // Respiro maior pós-pico (fim de ciclo natural)
+        indiceCeticismo = Math.min(1.15, indiceCeticismo + 0.04); 
       } else {
         indiceCeticismo = Math.max(0.85, indiceCeticismo - 0.05);
       }
     } else {
-      desempenhoTeorias[ultimoSinal.teoriaUsada].erros++;
       indiceCeticismo = Math.min(1.30, indiceCeticismo + 0.09); 
     }
   }
@@ -64,35 +90,30 @@ function analisarHistorico(historyData) {
     else break;
   }
 
-  // Identifica se a última rodada foi um pico expressivo (Fim de Ciclo / Exaustão da Mesa)
   let acabouDeDarPicoAlto = (penultimaVela.mult >= 15.0 || antepenultimaVela.mult >= 15.0);
-
-  // Identifica quebra de padrão orgânica (Ex: Logo após um momento bom, vem uma azul traiçoeira que quebra a cadência)
   let quebraDePadraoRecente = (penultimaVela.mult >= 10.0 && ultimaVela.mult < 2.0) || 
                               (azuisSeguidasRecentes >= 2 && penultimaVela.mult < 2.0);
 
-  // Percentual de poluição do ambiente recente
   let janelaRecente = historyData.slice(0, 6);
   let quantidadeAzuisJanela = janelaRecente.filter(i => i.mult < 2.0).length;
   let proporcaoAzuis = quantidadeAzuisJanela / janelaRecente.length;
   let ambientePoluido = proporcaoAzuis >= 0.55;
 
-  // RECUO TÁTICO POR FIM DE CICLO OU QUEBRA DE VALIDADE:
-  // Se a mesa acabou de pagar um pico alto (ex: 20x+) e desandou, ou se o padrão quebrou, o robô entende que o ciclo expirou.
+  // RECUO TÁTICO
   if (acabouDeDarPicoAlto || quebraDePadraoRecente || ambientePoluido) {
     return registrarSinalESair(
       '🛡️ RECUO TÁTICO / FIM DE CICLO',
-      `Ciclo anterior encerrado (pico recente ou quebra de cadência identificada). Aguardando nova estrutura.`,
+      `Ciclo anterior encerrado (pico recente ou quebra de cadência identificada).`,
       'N/A',
       '20%',
       winRateFormatado,
       'ESPERA',
       'nenhuma',
-      historyData
+      historyData,
+      reflexaoAtual
     );
   }
 
-  // Fatores de oportunidade limpa para um NOVO ciclo
   let temPadraoRespiro = (penultimaVela.mult < 2.0 && ultimaVela.mult >= 2.0 && antepenultimaVela.mult >= 2.0);
   let rosasRecentesNoHistorico = historyData.slice(0, 15).filter(i => i.mult >= 10).length;
   let temFluxoQuente = rosasRecentesNoHistorico >= 1; 
@@ -105,7 +126,6 @@ function analisarHistorico(historyData) {
   let confiancaFinal = Math.round((scoreBase / indiceCeticismo) * 0.95);
   confiancaFinal = Math.min(Math.max(confiancaFinal, 30), 92);
 
-  // Libera entrada apenas se houver harmonia real no novo ciclo
   if (confiancaFinal >= 65 && !ambientePoluido) {
     return registrarSinalESair(
       '🟢 OPORTUNIDADE TÁTICA IDENTIFICADA',
@@ -115,7 +135,8 @@ function analisarHistorico(historyData) {
       winRateFormatado,
       'ENTRADA',
       'teoriaRespiroControlado',
-      historyData
+      historyData,
+      reflexaoAtual
     );
   }
 
@@ -125,9 +146,10 @@ function analisarHistorico(historyData) {
     '1.50x a 2.00x',
     `${confiancaFinal}%`,
     winRateFormatado,
-    'ENTRADA',
+    'ESPERA',
     'teoriaRespiroControlado',
-    historyData
+    historyData,
+    reflexaoAtual
   );
 }
 
@@ -162,11 +184,9 @@ function estimarTempo(qtdVelas) {
   return `${horas}h ${minsRestantes}m`;
 }
 
-function registrarSinalESair(sinal, motivo, alvo, confianca, taxaAcerto, tipoAcao, teoriaUsada, historyData) {
-  if (tipoAcao === 'ENTRADA') {
-    ultimosSinaisEmitidos.push({ tipo: tipoAcao, teoriaUsada, timestamp: Date.now() });
-    if (ultimosSinaisEmitidos.length > 15) ultimosSinaisEmitidos.shift();
-  }
+function registrarSinalESair(sinal, motivo, alvo, confianca, taxaAcerto, tipoAcao, teoriaUsada, historyData, reflexaoHumana) {
+  ultimosSinaisEmitidos.push({ tipoAcao, teoriaUsada, timestamp: Date.now() });
+  if (ultimosSinaisEmitidos.length > 15) ultimosSinaisEmitidos.shift();
 
   return {
     sinal,
@@ -174,7 +194,8 @@ function registrarSinalESair(sinal, motivo, alvo, confianca, taxaAcerto, tipoAca
     alvo,
     confianca,
     taxaAcerto,
-    estatisticasFaixas: calcularEstatisticasFaixas(historyData)
+    estatisticasFaixas: calcularEstatisticasFaixas(historyData),
+    reflexaoHumana
   };
 }
 
