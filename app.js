@@ -37,6 +37,13 @@ socket.onmessage = (event) => {
     // 1. Atualiza o Card de Recomendação/Sinal em tempo real
     if (mensagem.analise) {
       atualizarPainelSinal(mensagem.analise);
+      
+      // Se o backend enviar o histórico com feedback integrado, atualizamos nossa base local
+      if (mensagem.analise.historicoComFeedback) {
+        historyData = mensagem.analise.historicoComFeedback;
+        renderizarTudo();
+        return;
+      }
     }
 
     if (mensagem.tipo === 'HISTORICO_INICIAL') {
@@ -196,8 +203,16 @@ function renderizarVelasComCasas() {
   grid.innerHTML = paraExibir.map((item) => {
     const cor = getCorClass(item.mult);
 
+    // --- APLICAÇÃO DO CONTORNO DE FEEDBACK VISUAL (ACERTO / ERRO) ---
+    let estiloFeedback = '';
+    if (item.statusFeedback === 'acerto') {
+      estiloFeedback = 'border: 2px solid #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);'; // Verde (Acerto / Alvo Batido)
+    } else if (item.statusFeedback === 'erro') {
+      estiloFeedback = 'border: 2px solid #ef4444; box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);'; // Vermelho (Erro / Quebra)
+    }
+
     return `
-      <div class="vela-item ${cor}">
+      <div class="vela-item ${cor}" style="${estiloFeedback}">
         <div class="badge-casa">${item.badgeText}</div>
         <div class="mult">${item.mult.toFixed(2)}x</div>
         <div class="time">${item.time}</div>
@@ -226,13 +241,11 @@ function calcularMetricasFaixa(condicaoFn) {
 }
 
 function atualizarCardsSuperiores() {
-  // Faixas exatas: 10x-50x | 50x-100x | 100x-999x | 1000x+
   const f10_50 = calcularMetricasFaixa(m => m >= 10 && m < 50);
   const f50_100 = calcularMetricasFaixa(m => m >= 50 && m < 100);
   const f100_999 = calcularMetricasFaixa(m => m >= 100 && m < 1000);
   const f1000 = calcularMetricasFaixa(m => m >= 1000);
 
-  // Atualiza os elementos na tela com base nos IDs do novo index.html
   setVal('velas-10-50', f10_50.velas);
   setVal('tempo-10-50', f10_50.tempo);
 
@@ -311,7 +324,6 @@ function setVal(id, text) {
   if (el) el.innerText = text;
 }
 
-// MINUTAGEM: JANELA MÓVEL DE 20 MINUTOS POR VELA INDIVIDUAL
 function renderizarMinutagem20Minutos() {
   const chart = document.getElementById('minutagem-chart');
   if (!chart) return;
