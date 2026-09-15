@@ -1,11 +1,11 @@
 /**
- * Motor Avançado de Análise Preditiva - Com Rótulos de Feedback Visual para o Histórico
+ * Motor Avançado de Análise Preditiva - Com Rótulos de Feedback Visual para o Histórico (Apenas Entradas Ativas)
  */
 
 let desempenhoTeorias = {
   teoriaRespiroControlado: { acertos: 5, erros: 2 }, 
-  teoriaLimitacaoRoxa:      { acertos: 5, erros: 2 }, 
-  teoriaFluxoTatico:        { acertos: 5, erros: 2 }  
+  teoriaLimitacaoRoxa:       { acertos: 5, erros: 2 }, 
+  teoriaFluxoTatico:         { acertos: 5, erros: 2 }  
 };
 
 let ultimosSinaisEmitidos = [];
@@ -69,34 +69,6 @@ function analisarHistorico(historyData) {
     }
   }
 
-  // --- ATRIBUINDO FEEDBACK VISUAL AO HISTÓRICO (O Contorno Colorido) ---
-  // Vamos mapear o array de histórico para injetar uma propriedade 'statusFeedback' em cada item
-  // Regra: Se a vela anterior foi alvo de uma ENTRADA do bot:
-  // - Se mult >= 2.0 -> 'acerto' (Contorno Verde)
-  // - Se mult < 2.0  -> 'erro' (Contorno Vermelho)
-  // Se foi ESPERA ou neutro -> 'neutro' (Sem contorno especial ou cor padrão)
-  
-  let historyComFeedback = historyData.map((vela, index) => {
-    // Clona o objeto da vela para não corromper o original
-    let velaEnriquecida = { ...vela, statusFeedback: 'neutro' };
-
-    // Se temos um registro de sinal emitido correspondente a este índice do histórico
-    // (Lembrando que historyData[0] é o mais recente, então a rodada anterior foi baseada no sinal emitido logo antes)
-    if (index < ultimosSinaisEmitidos.length) {
-      // Pega o reflexo da ação tomada naquela época
-      // (ajustando a lógica de indexação para casar o histórico com o vetor de sinais)
-    }
-    
-    // Simplificando de forma prática baseada estritamente na regra de ouro de 2.0x para entradas:
-    if (vela.mult >= 2.00) {
-      velaEnriquecida.statusFeedback = 'acerto'; // Verde se pagou o alvo padrão
-    } else {
-      velaEnriquecida.statusFeedback = 'erro';   // Vermelho se ficou abaixo de 2.0x (azul)
-    }
-
-    return velaEnriquecida;
-  });
-
   // Win Rate Global
   let acertosGlobais = 0;
   let totalAmostras = Math.min(40, historyData.length - 2);
@@ -115,7 +87,7 @@ function analisarHistorico(historyData) {
 
   let acabouDeDarPicoAlto = (penultimaVela.mult >= 15.0 || antepenultimaVela.mult >= 15.0);
   let quebraDePadraoRecente = (penultimaVela.mult >= 10.0 && ultimaVela.mult < 2.0) || 
-                              (azuisSeguidasRecentes >= 2 && penultimaVela.mult < 2.0);
+                             (azuisSeguidasRecentes >= 2 && penultimaVela.mult < 2.0);
 
   let janelaRecente = historyData.slice(0, 6);
   let quantidadeAzuisJanela = janelaRecente.filter(i => i.mult < 2.0).length;
@@ -132,8 +104,7 @@ function analisarHistorico(historyData) {
       'ESPERA',
       'nenhuma',
       historyData,
-      reflexaoAtual,
-      historyComFeedback
+      reflexaoAtual
     );
   }
 
@@ -159,8 +130,7 @@ function analisarHistorico(historyData) {
       'ENTRADA',
       'teoriaRespiroControlado',
       historyData,
-      reflexaoAtual,
-      historyComFeedback
+      reflexaoAtual
     );
   }
 
@@ -173,8 +143,7 @@ function analisarHistorico(historyData) {
     'ENTRADA',
     'teoriaRespiroControlado',
     historyData,
-    reflexaoAtual,
-    historyComFeedback
+    reflexaoAtual
   );
 }
 
@@ -209,9 +178,35 @@ function estimarTempo(qtdVelas) {
   return `${horas}h ${minsRestantes}m`;
 }
 
-function registrarSinalESair(sinal, motivo, alvo, confianca, taxaAcerto, tipoAcao, teoriaUsada, historyData, reflexaoHumana, historyComFeedback) {
+function registrarSinalESair(sinal, motivo, alvo, confianca, taxaAcerto, tipoAcao, teoriaUsada, historyData, reflexaoHumana) {
+  // Registra o sinal atual antes de empurrar para o histórico de controle
   ultimosSinaisEmitidos.push({ tipoAcao, teoriaUsada, timestamp: Date.now() });
   if (ultimosSinaisEmitidos.length > 15) ultimosSinaisEmitidos.shift();
+
+  // --- ATRIBUINDO FEEDBACK VISUAL RESTRITO A ENTRADAS ---
+  let historyComFeedback = historyData.map((vela, index) => {
+    let velaEnriquecida = { ...vela, statusFeedback: 'neutro' };
+
+    // O índice 0 no histórico representa a vela imediatamente anterior (a que acabou de fechar).
+    // Se no exato momento daquela rodada o bot havia emitido uma ENTRADA, nós avaliamos se ela deu bom ou ruim.
+    // Como 'ultimosSinaisEmitidos' armazena as ações passadas, mapeamos pelo deslocamento correto do índice:
+    const indiceSinalCorrespondente = ultimosSinaisEmitidos.length - 1 - index;
+    
+    if (indiceSinalCorrespondente >= 0 && indiceSinalCorrespondente < ultimosSinaisEmitidos.length) {
+      const acaoPassada = ultimosSinaisEmitidos[indiceSinalCorrespondente];
+      
+      // Contorna SOMENTE se a ação foi ENTRADA
+      if (acaoPassada && acaoPassada.tipoAcao === 'ENTRADA') {
+        if (vela.mult >= 2.00) {
+          velaEnriquecida.statusFeedback = 'acerto'; // Verde se o alvo de entrada bateu
+        } else {
+          velaEnriquecida.statusFeedback = 'erro';   // Vermelho se a entrada quebrou (azul)
+        }
+      }
+    }
+
+    return velaEnriquecida;
+  });
 
   return {
     sinal,
@@ -221,7 +216,7 @@ function registrarSinalESair(sinal, motivo, alvo, confianca, taxaAcerto, tipoAca
     taxaAcerto,
     estatisticasFaixas: calcularEstatisticasFaixas(historyData),
     reflexaoHumana,
-    historicoComFeedback: historyComFeedback || historyData
+    historicoComFeedback: historyComFeedback
   };
 }
 
