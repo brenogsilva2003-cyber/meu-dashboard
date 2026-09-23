@@ -12,6 +12,24 @@ app.use(express.static('.'));
 // Memória do servidor para guardar as últimas rodadas
 let historicoServidor = [];
 
+// Rota para limpar o histórico do servidor instantaneamente
+app.get('/limpar', (req, res) => {
+  historicoServidor = [];
+  console.log('[Servidor] Histórico limpo manualmente via rota /limpar.');
+  
+  // Avisa todos os clientes conectados para limparem o painel também
+  wss.clients.forEach((client) => {
+    if (client.readyState === 1) {
+      client.send(JSON.stringify({
+        tipo: 'HISTORICO_INICIAL',
+        dados: []
+      }));
+    }
+  });
+
+  res.send('Histórico limpo com sucesso! Pode voltar para o dashboard.');
+});
+
 wss.on('connection', (ws) => {
   console.log('[Servidor] Cliente conectado.');
 
@@ -52,6 +70,27 @@ wss.on('connection', (ws) => {
           }));
         }
       });
+
+      // 4. 🔥 DISPARO AUTOMÁTICO PARA O BOT: Verifica se a análise gerou uma Oportunidade Tática
+      // (Compatível com o objeto de análise que exibe "Oportunidade Tática Identificada")
+      const gerouSinal = analise && (
+        analise.acao === 'ENTRADA' || 
+        analise.status === 'ENTRADA' || 
+        (analise.sinal && typeof analise.sinal === 'string' && analise.sinal.toUpperCase().includes('OPORTUNIDADE')) ||
+        (analise.mensagem && typeof analise.mensagem === 'string' && analise.mensagem.toUpperCase().includes('OPORTUNIDADE'))
+      );
+
+      if (gerouSinal) {
+        console.log('[Servidor] 🚨 Oportunidade Tática detectada! Enviando comando de disparo para o Bot...');
+        wss.clients.forEach((client) => {
+          if (client.readyState === 1) {
+            client.send(JSON.stringify({
+              comando: 'DISPARAR_ENTRADA'
+            }));
+          }
+        });
+      }
+
     } catch (e) {
       console.error('Erro ao retransmitir pacote:', e);
     }
