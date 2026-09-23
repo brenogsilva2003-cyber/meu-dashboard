@@ -17,6 +17,7 @@ function analisarHistorico(historyData) {
     return {
       signal: '⚪ AGUARDAR',
       sinal: '⚪ AGUARDAR',
+      acao: 'ESPERA',
       motivo: 'Mapeando comportamento tático e faixas de velas altas (mín. 25 rodadas)...',
       alvo: 'N/A',
       confianca: '0%',
@@ -173,19 +174,13 @@ function estimarTempo(qtdVelas) {
 }
 
 function registrarSinalESair(sinal, motivo, alvo, confianca, taxaAcerto, tipoAcao, teoriaUsada, historyData, reflexaoHumana) {
-  // Registra o sinal atual na pilha de controle
   ultimosSinaisEmitidos.push({ tipoAcao, teoriaUsada, timestamp: Date.now() });
   if (ultimosSinaisEmitidos.length > 30) ultimosSinaisEmitidos.shift();
 
-  // ATRIBUIÇÃO PERMANENTE:
-  // Se a vela mais recente (historyData[0]) foi gerada logo após um sinal de ENTRADA, 
-  // gravamos o status de feedback diretamente no objeto dela para que nunca mais se perca ou mude de lugar.
   if (historyData.length > 1) {
-    // Pegamos a intenção que existia na rodada anterior para a vela 0 atual
     const sinalAnterior = ultimosSinaisEmitidos[ultimosSinaisEmitidos.length - 2];
     
     if (sinalAnterior && sinalAnterior.tipoAcao === 'ENTRADA') {
-      // Só define se ela ainda não tiver um feedback gravado
       if (!historyData[0].statusFeedback || historyData[0].statusFeedback === 'neutro') {
         historyData[0].statusFeedback = historyData[0].mult >= 2.00 ? 'acerto' : 'erro';
       }
@@ -196,7 +191,6 @@ function registrarSinalESair(sinal, motivo, alvo, confianca, taxaAcerto, tipoAca
     }
   }
 
-  // Mapeia todo o histórico garantindo que velas antigas mantenham seus contornos salvos
   let historyComFeedback = historyData.map((vela) => {
     return {
       ...vela,
@@ -210,6 +204,7 @@ function registrarSinalESair(sinal, motivo, alvo, confianca, taxaAcerto, tipoAca
     alvo,
     confianca,
     taxaAcerto,
+    acao: tipoAcao, // <--- Propriedade essencial para o servidor disparar a entrada no bot
     estatisticasFaixas: calcularEstatisticasFaixas(historyData),
     reflexaoHumana,
     historicoComFeedback: historyComFeedback
