@@ -1,7 +1,7 @@
 /**
  * Motor Avançado de Análise Tática e Preditiva - Mentalidade de Trader (Aviator/Spribe)
  * Versão Auto-Adaptativa: Memória Persistente, Anti-Repetição de Erros, Teto Dinâmico,
- * Trolagem (8x-9.99x), Ciclos (Exaustão/Respiro/Poluição), Adaptação por Métricas e Foco em Rosas/Roxas.
+ * Trolagem (8x-9.99x), Ciclos (Exaustão/Respiro/Poluição), Adaptação por Métricas e Calibração Realista de Rosas/Roxas.
  */
 
 const fs = require('fs');
@@ -127,6 +127,7 @@ function analisarTetosETrolagem(historyData) {
   const mediaRoxa25 = roxas25.length ? media(roxas25) : 2.6;
   const mediaRoxa60 = roxas60.length ? media(roxas60) : mediaRoxa25;
 
+  const qtdRosas60 = rosas60.length;
   const maiorRosa60 = rosas60.length ? Math.max(...rosas60) : null;
   const mediaRosa60 = rosas60.length ? media(rosas60) : null;
 
@@ -141,6 +142,7 @@ function analisarTetosETrolagem(historyData) {
     maiorRoxa25,
     mediaRoxa25,
     mediaRoxa60,
+    qtdRosas60,
     maiorRosa60,
     mediaRosa60,
     quaseRosas15,
@@ -246,7 +248,6 @@ function calcularEstatisticasBasicas(historyData) {
   const rodadasDesdeUltimoPico = historyData.findIndex(v => v.mult >= 10.0);
   const desdeUltimoPico = rodadasDesdeUltimoPico === -1 ? historyData.length : rodadasDesdeUltimoPico;
 
-  // Adapta o rigor ao momento: azuis com média saudável e boa proporção de 2x+ reduzem falso bloqueio
   const mesaSaudavel = mediaAzul20 >= 1.35 && proporcao2xMais50 >= 0.42;
   const limiteDensAzuis10 = mesaSaudavel ? 0.75 : 0.65;
   const limiteVolatilidade = mesaSaudavel ? 0.88 : 0.80;
@@ -366,65 +367,56 @@ function avaliarEstrategiaRosaVsRoxa(stats, padrao, armadilha, tetos) {
   const bloqueioEstruturalRosa =
     stats.ambientePoluido ||
     stats.faseExaustao ||
-    armadilha.armadilhaDetectada;
+    armadilha.armadilhaDetectada ||
+    tetos.trolagemRosaAtiva;
 
   let scoreRosa = 0;
   const sinaisRosa = [];
 
-  const alvoMedia = stats.intervaloMedioPicos ? Math.round(stats.intervaloMedioPicos) : 18;
-  const inicioJanela = Math.max(8, Math.min(14, alvoMedia - 6));
-  const fimJanela = Math.max(24, alvoMedia + 12);
+  // Piso mínimo elevado para 14 velas sem 10x+ para não disparar precoce em 8 velas
+  const alvoMedia = stats.intervaloMedioPicos ? Math.round(stats.intervaloMedioPicos) : 20;
+  const inicioJanela = Math.max(14, Math.min(20, alvoMedia - 4));
+  const fimJanela = Math.max(28, alvoMedia + 12);
 
-  if (!bloqueioEstruturalRosa) {
-    if (stats.desdeUltimoPico >= inicioJanela && stats.desdeUltimoPico <= fimJanela) {
-      scoreRosa += 34;
-      sinaisRosa.push(`janela madura (${stats.desdeUltimoPico} velas sem 10x+)`);
-    } else if (stats.desdeUltimoPico > fimJanela && stats.desdeUltimoPico <= fimJanela + 14) {
-      scoreRosa += 20;
+  if (!bloqueioEstruturalRosa && stats.desdeUltimoPico >= inicioJanela) {
+    if (stats.desdeUltimoPico <= fimJanela) {
+      scoreRosa += 30;
+      sinaisRosa.push(`atraso consistente (${stats.desdeUltimoPico} velas sem 10x+)`);
+    } else if (stats.desdeUltimoPico <= fimJanela + 14) {
+      scoreRosa += 22;
       sinaisRosa.push(`janela esticada (${stats.desdeUltimoPico} velas sem 10x+)`);
     }
 
     if (stats.faseRespiro) {
-      scoreRosa += 24;
+      scoreRosa += 20;
       sinaisRosa.push('respiro da mesa');
     }
 
-    if (stats.roxasMediasAltas20 >= 3 && stats.densAzuis10 <= 0.45) {
+    if (stats.roxasMediasAltas20 >= 4 && stats.densAzuis10 <= 0.40) {
+      scoreRosa += 20;
+      sinaisRosa.push('base forte de roxas ativas');
+    }
+
+    if (padrao.amostras >= 5 && padrao.taxaRosa10x !== null && padrao.taxaRosa10x >= 0.40) {
       scoreRosa += 18;
-      sinaisRosa.push('base de roxas ativa');
-    }
-
-    if (padrao.amostras >= 4 && padrao.taxaRosa10x !== null && padrao.taxaRosa10x >= 0.35) {
-      scoreRosa += 16;
-      sinaisRosa.push(`padrão similar com ${(padrao.taxaRosa10x * 100).toFixed(0)}% de rosa`);
-    }
-
-    if (tetos.trolagemRosaAtiva) {
-      scoreRosa -= 22;
-      sinaisRosa.push('atenção a corte pré-10x (8x–9.99x)');
+      sinaisRosa.push(`memória com ${(padrao.taxaRosa10x * 100).toFixed(0)}% de rosa`);
     }
   }
 
-  const buscarRosa = !bloqueioEstruturalRosa && scoreRosa >= 60 && sinaisRosa.length >= 2;
+  // Exige score >= 70 e pelo menos 3 confluências reais para sinalizar busca de rosa
+  const buscarRosa = !bloqueioEstruturalRosa && scoreRosa >= 70 && sinaisRosa.length >= 3;
 
   const tetoRoxaCalibrado = Math.max(2.0, Math.min(6.5, Number((tetos.mediaRoxa25 * 1.15).toFixed(2))));
   const pisoRoxaCalibrado = Math.max(1.8, Math.min(tetoRoxaCalibrado - 0.5, Number((tetos.mediaRoxa25 * 0.85).toFixed(2))));
 
-  let alvoRosa = '10.00x+ (parcial 3.00x~5.00x)';
-  if (tetos.mediaRosa60) {
-    if (tetos.mediaRosa60 < 15) {
-      alvoRosa = '10.00x ~ 15.00x (parcial 3.00x)';
-    } else if (tetos.mediaRosa60 >= 25) {
-      alvoRosa = '15.00x+ (parcial 4.00x~6.00x)';
-    }
-  }
-  if (tetos.trolagemRosaAtiva) {
-    alvoRosa = '8.00x ~ 10.00x (parcial 2.50x~3.50x)';
+  let alvoRosa = '10.00x ~ 15.00x (parcial 3.00x)';
+  if (tetos.qtdRosas60 >= 3 && tetos.mediaRosa60 && tetos.mediaRosa60 >= 28 && tetos.maiorRoxa25 >= 5.0) {
+    alvoRosa = '15.00x+ (parcial 4.00x~5.00x)';
   }
 
   return {
     buscarRosa,
-    scoreRosa: Math.max(0, Math.min(100, scoreRosa)),
+    scoreRosa: Math.max(0, Math.min(82, scoreRosa)),
     motivoRosa: sinaisRosa.join(' + '),
     alvoRosa,
     alvoRoxa: `${pisoRoxaCalibrado.toFixed(2)}x ~ ${tetoRoxaCalibrado.toFixed(2)}x`
@@ -645,10 +637,10 @@ function analisarHistorico(historyData) {
     }
 
     if (estrategiaRosa.buscarRosa) {
-      scoreBase += 14;
+      scoreBase += 10;
       alvoTexto = estrategiaRosa.alvoRosa;
-      sinalTexto = `Oportunidade de ROSA (${estrategiaRosa.scoreRosa}%): ${estrategiaRosa.motivoRosa}.`;
-      motivoTexto = `Confluência para busca de rosa (${estrategiaRosa.motivoRosa}); teto de roxa recente em ${tetos.maiorRoxa25.toFixed(2)}x.`;
+      sinalTexto = `Confluência para ROSA (${estrategiaRosa.scoreRosa}%): ${estrategiaRosa.motivoRosa}.`;
+      motivoTexto = `Confluência estrutural para busca de rosa (${estrategiaRosa.motivoRosa}); teto de roxa recente em ${tetos.maiorRoxa25.toFixed(2)}x.`;
     } else if (tetos.trolagemRosaAtiva) {
       alvoTexto = `2.00x ~ ${Math.min(4.0, Math.max(2.2, tetos.mediaRoxa25)).toFixed(2)}x`;
       sinalTexto = `Foco em ROXA (${alvoTexto}) — evitando trolagem na trave da rosa (8x–9.99x).`;
@@ -668,7 +660,8 @@ function analisarHistorico(historyData) {
     scoreBase = Math.round(scoreBase * teoriaEscolhida.bonus);
 
     let confFinal = Math.round((scoreBase / indiceCeticismo) * 0.94);
-    confiancaNumerica = Math.min(Math.max(confFinal, 22), 92);
+    const tetoConfianca = estrategiaRosa.buscarRosa ? 75 : 90;
+    confiancaNumerica = Math.min(Math.max(confFinal, 22), tetoConfianca);
 
     if (padrao.amostras >= 5 && padrao.taxaPagou2x !== null && padrao.taxaPagou2x < 0.35) {
       acaoDecidida = 'ESPERA';
