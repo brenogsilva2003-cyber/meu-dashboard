@@ -22,7 +22,6 @@ const ESTADO_PADRAO = {
   acertosConsecutivos: 0,
   esperasConsecutivas: 0,
   assinaturasErros: [],
-  // Parâmetros internos auto-calibrados conforme o histórico cresce
   parametrosAdaptativos: {
     sensibilidadeQuebra150: 1.0,
     pesoMemoriaLonga: 1.0
@@ -58,9 +57,7 @@ function carregarEstado() {
 function salvarEstado(estado) {
   try {
     fs.writeFileSync(CAMINHO_ESTADO, JSON.stringify(estado, null, 2), 'utf8');
-  } catch (_) {
-    // Em ambientes com filesystem restrito/efêmero, mantém em memória sem quebrar
-  }
+  } catch (_) {}
 }
 
 let estadoAprendizado = carregarEstado();
@@ -76,6 +73,26 @@ let assinaturasErros = estadoAprendizado.assinaturasErros;
 let parametrosAdaptativos = estadoAprendizado.parametrosAdaptativos;
 
 // ====================== HELPERS DE CLASSIFICAÇÃO & ESTATÍSTICA ======================
+
+function normalizarHistorico(historyData) {
+  if (!Array.isArray(historyData)) return [];
+  return historyData
+    .map((item) => {
+      if (typeof item === 'number') {
+        return Number.isFinite(item) && item > 0 ? { mult: item } : null;
+      }
+      if (!item || typeof item !== 'object') return null;
+      const mult = Number(item.mult);
+      if (!Number.isFinite(mult) || mult <= 0) return null;
+      return {
+        ...item,
+        mult,
+        time: typeof item.time === 'string' ? item.time : '',
+        timestamp: typeof item.timestamp === 'number' ? item.timestamp : null
+      };
+    })
+    .filter(Boolean);
+}
 
 function classificarVela(mult) {
   if (mult < 2.0) return 'azul';
@@ -130,6 +147,29 @@ function avaliarMemoriaErros(assinaturaAtual) {
   };
 }
 
+function calcularTaxaAcertoGlobal() {
+  let totalAcertos = 0;
+  let totalErros = 0;
+  Object.values(desempenhoTeorias).forEach((t) => {
+    totalAcertos += Number(t?.acertos || 0);
+    totalErros += Number(t?.erros || 0);
+  });
+  const total = totalAcertos + totalErros;
+  if (total <= 0) return '0.0%';
+  return `${((totalAcertos / total) * 100).toFixed(1)}%`;
+}
+
+function formatarRetornoServidor(payload, historyData, teoriaUsada) {
+  return {
+    ...payload,
+    confianca: `${clamp(Math.round(Number(payload.confianca) || 0), 0, 99)}%`,
+    taxaAcerto: calcularTaxaAcertoGlobal(),
+    teoriaUsada,
+    totalRodadas: historyData.length,
+    reflexoesRecentes: historicoReflexoes.slice(-3)
+  };
+}
+
 // ====================== JANELA DE 18 VELAS & HISTÓRICO COMPLETO ======================
 
 function analisarJanela18(historyData) {
@@ -142,7 +182,6 @@ function analisarJanela18(historyData) {
   const densAzuis18 = azuis18.length / (janela18.length || 1);
   const quebrasAbaixo150_18 = janela18.filter(v => v.mult < 1.5).length;
 
-  // Compara metade mais recente vs metade anterior dentro da janela de 18 para ler tendência fluida
   const metade = Math.floor(janela18.length / 2);
   const recentes = janela18.slice(0, metade);
   const anteriores = janela18.slice(metade, metade * 2);
@@ -159,7 +198,6 @@ function analisarJanela18(historyData) {
   if (deltaTendencia >= 0.16) tendencia18 = 'melhorando';
   else if (deltaTendencia <= -0.20) tendencia18 = 'pressionada';
 
-  // Risco de quebra < 1.50x baseado na janela de 18 e na média de roxas/azuis
   let riscoQuebra150 = 0;
   if (quebrasAbaixo150_18 >= Math.ceil(janela18.length * 0.45)) riscoQuebra150 += 10;
   if (mediaAzul18 < 1.24) riscoQuebra150 += 8;
@@ -185,7 +223,6 @@ function analisarJanela18(historyData) {
 
 function analisarHistoricoCompleto(historyData, janela18) {
   const totalVelas = historyData.length;
-  // Evolui a profundidade de leitura conforme mais velas são registradas
   const capacidadeMaturidade = clamp(totalVelas / 120, 0.25, 1.0);
 
   const todasAzuis = historyData.filter(v => v.mult < 2.0);
@@ -198,7 +235,6 @@ function analisarHistoricoCompleto(historyData, janela18) {
     ? historyData.filter(v => v.mult >= 2.0).length / totalVelas
     : 0.5;
 
-  // Varre TODO o histórico (incluindo 40, 60, 100+ velas atrás) por padrões semelhantes de 6 velas
   const tamPadrao = 6;
   let correspondencias = 0;
   let somaDistancia = 0;
@@ -207,17 +243,21 @@ function analisarHistoricoCompleto(historyData, janela18) {
   let pagouRosaPerto = 0;
 
   if (totalVelas >= tamPadrao + 12) {
-    const atual = historyData.slice(0, tamPadrao).map(v => classificarDetalhado(v.mult));
+    const atual = historyData.slice(0, tamPadrao).map(v => String(classificarDetalhado(v.mult) || 'roxa'));
 
     for (let i = tamPadrao; i < totalVelas - 1; i++) {
-      const candidato = historyData.slice(i, i + tamPadrao).map(v => classificarDetalhado(v.mult));
+      const candidato = historyData.slice(i, i + tamPadrao).map(v => String(classificarDetalhado(v.mult) || 'roxa'));
       let pontos = 0;
+
       for (let k = 0; k < tamPadrao; k++) {
-        if (atual[k] === candidato[k]) pontos += 1;
-        else if (
-          (atual[k].startsWith('azul') && candidato[k].startsWith('azul')) ||
-          (atual[k] === 'roxa' && candidato[k] === 'rosa') ||
-          (atual[k] === 'rosa' && candidato[k] === 'roxa')
+        const a = String(atual[k] || '');
+        const b = String(candidato[k] || '');
+        if (a === b) {
+          pontos += 1;
+        } else if (
+          (a.startsWith('azul') && b.startsWith('azul')) ||
+          (a === 'roxa' && b === 'rosa') ||
+          (a === 'rosa' && b === 'roxa')
         ) {
           pontos += 0.5;
         }
@@ -226,7 +266,7 @@ function analisarHistoricoCompleto(historyData, janela18) {
       const similaridade = pontos / tamPadrao;
       if (similaridade >= 0.75) {
         const velaSeguinte = historyData[i - 1]?.mult;
-        if (typeof velaSeguinte === 'number') {
+        if (typeof velaSeguinte === 'number' && Number.isFinite(velaSeguinte)) {
           correspondencias++;
           somaDistancia += i;
           if (velaSeguinte >= 2.0) pagou2xApos++;
@@ -243,7 +283,6 @@ function analisarHistoricoCompleto(historyData, janela18) {
   const taxaQuebra150Historica = correspondencias >= 2 ? quebrouAbaixo150Apos / correspondencias : null;
   const taxaRosaHistorica = correspondencias >= 2 ? pagouRosaPerto / correspondencias : null;
 
-  // Ajuste fluido de score baseado no histórico completo (sem rigidez)
   let ajusteHistoricoGlobal = 0;
   let ajusteLongoPrazo = 0;
 
@@ -255,7 +294,6 @@ function analisarHistoricoCompleto(historyData, janela18) {
     }
   }
 
-  // Compara a janela de 18 com a média global de roxas/azuis da base inteira
   if (janela18.mediaRoxa18 >= mediaGlobalRoxa * 0.95 && janela18.mediaAzul18 >= mediaGlobalAzul * 0.95) {
     ajusteHistoricoGlobal += 4;
   }
@@ -587,7 +625,6 @@ function avaliarEstrategiaRosaVsRoxa(stats, padrao, armadilha, tetos, memoriaLon
 
   const buscarRosa = !bloqueioEstruturalRosa && scoreRosa >= 70 && sinaisRosa.length >= 2;
 
-  // Alvo de roxa calibrado também com base na janela de 18 e na média global da mesa
   const baseRoxa = (tetos.mediaRoxa25 * 0.5) + (stats.mediaRoxa18 * 0.3) + (memoriaLonga.mediaGlobalRoxa * 0.2);
   const tetoRoxaCalibrado = Math.max(2.0, Math.min(6.5, Number((baseRoxa * 1.12).toFixed(2))));
   const pisoRoxaCalibrado = Math.max(1.8, Math.min(tetoRoxaCalibrado - 0.5, Number((baseRoxa * 0.85).toFixed(2))));
@@ -664,8 +701,10 @@ function escolherMelhorTeoria(stats, padrao, estrategiaRosa, janela18) {
 
 // ====================== FUNÇÃO PRINCIPAL ======================
 
-function analisarHistorico(historyData) {
-  if (!historyData || historyData.length < 25) {
+function analisarHistorico(rawHistory) {
+  const historyData = normalizarHistorico(rawHistory);
+
+  if (historyData.length < 25) {
     const jsonEsperaInicial = {
       acao: 'ESPERA',
       sinal: 'Mapeando o fluxo, tetos e respiração inicial da mesa...',
@@ -675,7 +714,7 @@ function analisarHistorico(historyData) {
       reflexao: 'Aguardando contexto estrutural para iniciar autocrítica e avaliação de risco.',
       nivel_ceticismo: 'alto'
     };
-    return formatarRetornoServidor(jsonEsperaInicial, historyData || [], 'nenhuma');
+    return formatarRetornoServidor(jsonEsperaInicial, historyData, 'nenhuma');
   }
 
   const ultimaVela = historyData[0];
@@ -700,7 +739,6 @@ function analisarHistorico(historyData) {
             1.38
           );
         }
-        // Alívio suave de sensibilidade a quebras < 1.50x quando acerta
         parametrosAdaptativos.sensibilidadeQuebra150 = clamp(
           parametrosAdaptativos.sensibilidadeQuebra150 * 0.98,
           0.75,
@@ -793,6 +831,13 @@ function analisarHistorico(historyData) {
   let confiancaNumerica = 72;
   let nivelCeticismoStr = 'moderado';
 
+  if (estrategiaRosa.buscarRosa) {
+    teoriaUtilizada = 'gatilhoRosaEstrutural';
+    alvoTexto = estrategiaRosa.alvoRosa;
+    sinalTexto = `Oportunidade tática para ROSA (${estrategiaRosa.motivoRosa || 'janela estrutural'}).`;
+    confiancaNumerica = 76;
+  }
+
   if (armadilha.armadilhaDetectada) {
     acaoDecidida = 'ESPERA';
     teoriaUtilizada = 'nenhuma';
@@ -822,8 +867,7 @@ function analisarHistorico(historyData) {
     confiancaNumerica = 36;
     nivelCeticismoStr = 'alto';
   } else {
-    // Avaliação fluida combinando indicadores positivos, proteção < 1.50x e aprendizado de longo prazo
-    let scoreBase = 58;
+    let scoreBase = estrategiaRosa.buscarRosa ? 64 : 58;
 
     if (stats.azuisSeguidas <= 1) scoreBase += 9;
     if (janela18.densAzuis18 < 0.45) scoreBase += 8;
@@ -833,7 +877,6 @@ function analisarHistorico(historyData) {
     if (stats.mesaSaudavel) scoreBase += 6;
     if (ultimaVela.mult >= 2.0 && ultimaVela.mult < 8.0) scoreBase += 5;
 
-    // Proteção gradual contra quebras < 1.50x (não trava sozinha, mas pede mais força)
     if (janela18.riscoQuebra150 > 0) {
       scoreBase -= janela18.riscoQuebra150;
       motivoTexto += ` Risco <1.50x na janela de 18v (-${janela18.riscoQuebra150} pts).`;
@@ -852,160 +895,62 @@ function analisarHistorico(historyData) {
     if (memoriaLonga.impactoScoreTotal !== 0) {
       scoreBase += memoriaLonga.impactoScoreTotal;
       if (memoriaLonga.correspondencias >= 2 && memoriaLonga.taxa2xHistorica !== null) {
-        motivoTexto += ` Histórico (${memoriaLonga.correspondencias}x parecidos, ~${memoriaLonga.distanciaMediaHistorica}v atrás): ${(memoriaLonga.taxa2xHistorica * 100).toFixed(0)}% pagaram 2x+ (${memoriaLonga.impactoScoreTotal > 0 ? '+' : ''}${memoriaLonga.impactoScoreTotal} pts).`;
+        motivoTexto += ` Memória longa (${memoriaLonga.correspondencias} padrões; 2x: ${(memoriaLonga.taxa2xHistorica * 100).toFixed(0)}%; ${memoriaLonga.impactoScoreTotal > 0 ? '+' : ''}${memoriaLonga.impactoScoreTotal} pts).`;
+      } else {
+        motivoTexto += ` Ajuste histórico global (${memoriaLonga.impactoScoreTotal > 0 ? '+' : ''}${memoriaLonga.impactoScoreTotal} pts).`;
       }
     }
 
-    if (estrategiaRosa.buscarRosa) {
-      scoreBase += 10;
-      alvoTexto = estrategiaRosa.alvoRosa;
-      sinalTexto = `Confluência para ROSA (${estrategiaRosa.scoreRosa}%): ${estrategiaRosa.motivoRosa}.`;
-      motivoTexto += ` Busca de rosa estruturada (${estrategiaRosa.motivoRosa}).`;
-    } else if (tetos.trolagemRosaAtiva) {
-      alvoTexto = `2.00x ~ ${Math.min(4.0, Math.max(2.2, tetos.mediaRoxa25)).toFixed(2)}x`;
-      sinalTexto = `Foco em ROXA (${alvoTexto}) — evitando trolagem na trave da rosa (8x–9.99x).`;
+    if (padrao.amostras >= 3 && padrao.taxaPagou2x !== null) {
+      const ajustePadrao = Math.round((padrao.taxaPagou2x - 0.5) * 18);
+      scoreBase += ajustePadrao;
     }
 
-    if (padrao.amostras >= 5 && padrao.taxaPagou2x !== null) {
-      if (padrao.taxaPagou2x >= 0.65) {
-        scoreBase += Math.round(13 * padrao.confiancaEmpirica);
-        motivoTexto += ` Padrão recente (${padrao.amostras}x) pagou 2x+ em ${(padrao.taxaPagou2x * 100).toFixed(0)}%.`;
-      } else if (padrao.taxaPagou2x <= 0.40) {
-        scoreBase -= Math.round(12 * padrao.confiancaEmpirica);
-        motivoTexto += ` Padrão recente (${padrao.amostras}x) teve baixa taxa de 2x+ (${(padrao.taxaPagou2x * 100).toFixed(0)}%).`;
-      }
-    }
+    scoreBase = scoreBase * teoriaEscolhida.bonus / clamp(indiceCeticismo, 0.84, 1.32);
+    confiancaNumerica = clamp(Math.round(scoreBase), 25, 96);
 
-    scoreBase = Math.round(scoreBase * teoriaEscolhida.bonus);
-
-    let confFinal = Math.round((scoreBase / indiceCeticismo) * 0.95);
-    const tetoConfianca = estrategiaRosa.buscarRosa ? 75 : 90;
-    confiancaNumerica = Math.min(Math.max(confFinal, 24), tetoConfianca);
-
-    let acertosRecentes40 = 0;
-    const total40 = Math.min(40, historyData.length);
-    for (let i = 0; i < total40; i++) {
-      if (historyData[i].mult >= 2.0) acertosRecentes40++;
-    }
-    const wrRecente40 = total40 > 0 ? acertosRecentes40 / total40 : 0.5;
-    // Limiar suave para não travar em longas esperas
-    const limiarConfiancaEntrada = wrRecente40 < 0.38 ? 63 : 58;
-
-    if (padrao.amostras >= 5 && padrao.taxaPagou2x !== null && padrao.taxaPagou2x < 0.32 && (padrao.taxaQuebrou ?? 0) >= 0.65) {
+    if (confiancaNumerica < 52) {
       acaoDecidida = 'ESPERA';
       teoriaUtilizada = 'nenhuma';
-      sinalTexto = 'Padrão recente com forte histórico de quebra.';
-      motivoTexto = `Padrões semelhantes pagaram 2x+ em apenas ${(padrao.taxaPagou2x * 100).toFixed(0)}%. Aguardando melhor estrutura.`;
+      sinalTexto = 'Confluência insuficiente no momento — aguardando confirmação.';
       alvoTexto = 'N/A';
-      confiancaNumerica = Math.min(confiancaNumerica, 40);
       nivelCeticismoStr = 'alto';
-    } else if (confiancaNumerica < limiarConfiancaEntrada) {
-      acaoDecidida = 'ESPERA';
-      teoriaUtilizada = 'nenhuma';
-      sinalTexto = 'Cenário sem vantagem estatística clara no momento.';
-      motivoTexto = `Confiança (${confiancaNumerica}%) abaixo do limiar necessário (${limiarConfiancaEntrada}%) para o momento atual.`;
-      alvoTexto = 'N/A';
+    } else if (confiancaNumerica < 65) {
       nivelCeticismoStr = 'moderado';
+      sinalTexto = `Entrada moderada (${estrategiaRosa.buscarRosa ? 'ROSA' : 'ROXA'}) — gestão de risco ativa.`;
     } else {
-      nivelCeticismoStr = indiceCeticismo > 1.12 ? 'moderado' : 'baixo';
-      ultimoContextoEntrada = assinaturaAtual;
-      reflexaoAtual += ` | 18v: ${janela18.tendencia18} (az ${janela18.mediaAzul18.toFixed(2)}x / rx ${janela18.mediaRoxa18.toFixed(2)}x) | Base: ${memoriaLonga.totalVelas}v | Teoria: ${teoriaEscolhida.nome} | Alvo: ${alvoTexto}.`;
+      nivelCeticismoStr = 'baixo';
     }
   }
 
-  const jsonDecisao = {
-    acao: acaoDecidida,
-    sinal: sinalTexto,
-    motivo: motivoTexto,
-    alvo: alvoTexto,
-    confianca: confiancaNumerica.toString(),
-    reflexao: reflexaoAtual,
-    nivel_ceticismo: nivelCeticismoStr
-  };
+  if (acaoDecidida === 'ENTRADA') {
+    ultimoContextoEntrada = assinaturaAtual;
+  }
 
-  return formatarRetornoServidor(jsonDecisao, historyData, teoriaUtilizada);
-}
-
-// ====================== ESTATÍSTICAS DE FAIXAS ======================
-
-function calcularEstatisticasFaixas(historyData) {
-  let resultado = {
-    faixa10_50: { velas: '-', tempo: 'Nenhum' },
-    faixa50_100: { velas: '-', tempo: 'Nenhum' },
-    faixa100_999: { velas: '-', tempo: 'Nenhum' },
-    faixa1000: { velas: '-', tempo: 'Nenhum' }
-  };
-
-  let idx10 = historyData.findIndex(i => i.mult >= 10 && i.mult < 50);
-  let idx50 = historyData.findIndex(i => i.mult >= 50 && i.mult < 100);
-  let idx100 = historyData.findIndex(i => i.mult >= 100 && i.mult < 1000);
-  let idx1000 = historyData.findIndex(i => i.mult >= 1000);
-
-  if (idx10 !== -1) resultado.faixa10_50 = { velas: idx10, tempo: estimarTempo(idx10) };
-  if (idx50 !== -1) resultado.faixa50_100 = { velas: idx50, tempo: estimarTempo(idx50) };
-  if (idx100 !== -1) resultado.faixa100_999 = { velas: idx100, tempo: estimarTempo(idx100) };
-  if (idx1000 !== -1) resultado.faixa1000 = { velas: idx1000, tempo: estimarTempo(idx1000) };
-
-  return resultado;
-}
-
-function estimarTempo(qtdVelas) {
-  let segundosTotais = qtdVelas * 25;
-  let minutos = Math.floor(segundosTotais / 60);
-  if (minutos < 1) return `${segundosTotais}s`;
-  let horas = Math.floor(minutos / 60);
-  if (horas < 1) return `${minutos}m`;
-  let minsRestantes = minutos % 60;
-  return `${horas}h ${minsRestantes}m`;
-}
-
-// ====================== FORMATAÇÃO DE RETORNO ======================
-
-function formatarRetornoServidor(jsonDecisao, historyData, teoriaUsada = 'nenhuma') {
   ultimosSinaisEmitidos.push({
-    tipoAcao: jsonDecisao.acao,
-    teoriaUsada: teoriaUsada,
+    tipoAcao: acaoDecidida,
+    teoriaUsada: teoriaUtilizada,
     timestamp: Date.now()
   });
-  if (ultimosSinaisEmitidos.length > 35) ultimosSinaisEmitidos.shift();
-
-  if (historyData.length > 1) {
-    const sinalAnterior = ultimosSinaisEmitidos[ultimosSinaisEmitidos.length - 2];
-    if (sinalAnterior && sinalAnterior.tipoAcao === 'ENTRADA') {
-      if (!historyData[0].statusFeedback || historyData[0].statusFeedback === 'neutro') {
-        historyData[0].statusFeedback = historyData[0].mult >= 2.00 ? 'acerto' : 'erro';
-      }
-    } else {
-      if (!historyData[0].statusFeedback) {
-        historyData[0].statusFeedback = 'neutro';
-      }
-    }
+  if (ultimosSinaisEmitidos.length > 50) {
+    ultimosSinaisEmitidos.shift();
   }
 
-  let historyComFeedback = historyData.map((vela) => ({
-    ...vela,
-    statusFeedback: vela.statusFeedback || 'neutro'
-  }));
-
-  let acertosGlobais = 0;
-  let totalAmostras = Math.min(40, historyData.length);
-  for (let i = 0; i < totalAmostras; i++) {
-    if (historyData[i].mult >= 2.00) acertosGlobais++;
-  }
-  let winRateCalculado = totalAmostras > 0 ? (acertosGlobais / totalAmostras) * 100 : 65.0;
-  const taxaAcertoFormatada = `${winRateCalculado.toFixed(1)}%`;
-
-  return {
-    acao: jsonDecisao.acao,
-    sinal: jsonDecisao.sinal,
-    motivo: jsonDecisao.motivo,
-    alvo: jsonDecisao.alvo,
-    confianca: `${jsonDecisao.confianca}%`,
-    taxaAcerto: taxaAcertoFormatada,
-    estatisticasFaixas: calcularEstatisticasFaixas(historyData),
-    reflexaoHumana: jsonDecisao.reflexao,
-    historicoComFeedback: historyComFeedback
-  };
+  return formatarRetornoServidor(
+    {
+      acao: acaoDecidida,
+      sinal: sinalTexto,
+      motivo: motivoTexto,
+      alvo: alvoTexto,
+      confianca: String(confiancaNumerica),
+      reflexao: reflexaoAtual,
+      nivel_ceticismo: nivelCeticismoStr
+    },
+    historyData,
+    teoriaUtilizada
+  );
 }
 
-module.exports = { analisarHistorico };
+module.exports = {
+  analisarHistorico
+};
