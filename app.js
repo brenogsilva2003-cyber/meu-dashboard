@@ -1,76 +1,110 @@
 let historyData = [];
 let donutChartInstance = null;
+let socket = null;
+let reconectarTimer = null;
+let renderAgendado = false;
 
-// Relógio Digital e Atualização Dinâmica do Gráfico e Tempos
+// Relógio Digital e Atualização de tempos relativos a cada 1s
 setInterval(() => {
   const agora = new Date();
   const relogioEl = document.getElementById('relogio-digital');
   if (relogioEl) {
     relogioEl.innerText = agora.toTimeString().split(' ')[0];
   }
-  
-  // Atualiza em tempo real a minutagem e os tempos decorridos
+
   renderizarMinutagem20Minutos();
   atualizarCardsSuperiores();
 }, 1000);
 
-// Conexão WebSocket Segura e Dinâmica para Local ou Render
-const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const wsHost = window.location.host;
-const socket = new WebSocket(`${wsProtocol}//${wsHost}`);
+function agendarRenderizacao() {
+  if (renderAgendado) return;
+  renderAgendado = true;
+  requestAnimationFrame(() => {
+    renderAgendado = false;
+    renderizarTudo();
+  });
+}
 
-socket.onopen = () => {
-  console.log('Conectado ao servidor WebSocket com sucesso.');
-};
+function conectarWebSocket() {
+  if (reconectarTimer) {
+    clearTimeout(reconectarTimer);
+    reconectarTimer = null;
+  }
 
-socket.onclose = () => {
-  console.warn('Conexão WebSocket perdida. Tentando reconectar em 3s...');
-  setTimeout(() => {
-    window.location.reload();
-  }, 3000);
-};
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsHost = window.location.host;
+  socket = new WebSocket(`${wsProtocol}//${wsHost}`);
 
-socket.onmessage = (event) => {
-  try {
-    const mensagem = JSON.parse(event.data);
+  socket.onopen = () => {
+    console.log('Conectado ao servidor WebSocket em tempo real.');
+  };
 
-    // 1. Atualiza o Card de Recomendação/Sinal em tempo real
-    if (mensagem.analise) {
-      atualizarPainelSinal(mensagem.analise);
-      
-      // Se o backend enviar o histórico com feedback integrado, atualizamos nossa base local
-      if (mensagem.analise.historicoComFeedback) {
-        historyData = mensagem.analise.historicoComFeedback;
-        renderizarTudo();
+  socket.onclose = () => {
+    console.warn('Conexão WebSocket encerrada. Reconectando automaticamente em 1.5s...');
+    reconectarTimer = setTimeout(conectarWebSocket, 1500);
+  };
+
+  socket.onerror = (err) => {
+    console.warn('Erro no WebSocket:', err);
+  };
+
+  socket.onmessage = (event) => {
+    try {
+      const mensagem = JSON.parse(event.data);
+
+      if (mensagem.tipo === 'HISTORICO_INICIAL') {
+        historyData = Array.isArray(mensagem.dados) ? mensagem.dados : [];
+        if (mensagem.analise) {
+          atualizarPainelSinal(mensagem.analise);
+          if (Array.isArray(mensagem.analise.historicoComFeedback) && mensagem.analise.historicoComFeedback.length) {
+            historyData = mensagem.analise.historicoComFeedback;
+          }
+        }
+        agendarRenderizacao();
         return;
       }
-    }
 
-    if (mensagem.tipo === 'HISTORICO_INICIAL') {
-      historyData = mensagem.dados || [];
-      renderizarTudo();
-      return;
-    }
+      if (mensagem.tipo === 'NOVA_RODADA') {
+        const novaRodada = mensagem.dados;
+        if (novaRodada && typeof novaRodada.mult === 'number' && !Number.isNaN(novaRodada.mult)) {
+          const jaExisteMesmoId = novaRodada.id && historyData.some(item => item.id === novaRodada.id);
+          const ultima = historyData[0];
+          const mesmaVelaExata = !novaRodada.id && ultima &&
+            ultima.mult === novaRodada.mult &&
+            ultima.time === novaRodada.time &&
+            Math.abs((ultima.timestamp || 0) - (novaRodada.timestamp || 0)) < 1500;
 
-    if (mensagem.tipo === 'NOVA_RODADA') {
-      const novaRodada = mensagem.dados;
-      if (novaRodada && novaRodada.mult) {
-        const ultima = historyData[0];
-        
-        // Evita duplicatas sequenciais e força a renderização automática
-        if (!ultima || ultima.mult !== novaRodada.mult || ultima.time !== novaRodada.time) {
-          historyData.unshift(novaRodada);
-          if (historyData.length > 500) historyData.pop();
-          
-          // RE-RENDERIZAÇÃO FORÇADA
-          renderizarTudo();
+          if (!jaExisteMesmoId && !mesmaVelaExata) {
+            historyData.unshift(novaRodada);
+            if (historyData.length > 500) {
+              historyData.pop();
+            }
+          }
         }
+
+        if (mensagem.analise) {
+          atualizarPainelSinal(mensagem.analise);
+          if (Array.isArray(mensagem.analise.historicoComFeedback) && mensagem.analise.historicoComFeedback.length === historyData.length) {
+            historyData = mensagem.analise.historicoComFeedback;
+          }
+        }
+
+        agendarRenderizacao();
+        return;
       }
+
+      // Caso chegue apenas análise em outro formato de mensagem
+      if (mensagem.analise) {
+        atualizarPainelSinal(mensagem.analise);
+        agendarRenderizacao();
+      }
+    } catch (e) {
+      console.error('Erro ao processar pacote WebSocket:', e);
     }
-  } catch (e) {
-    console.error('Erro ao processar pacote WebSocket:', e);
-  }
-};
+  };
+}
+
+conectarWebSocket();
 
 /**
  * Atualiza os elementos visuais do Card de Sinal em Tempo Real (Incluindo Win Rate)
@@ -79,19 +113,19 @@ function atualizarPainelSinal(analise) {
   setVal('sinal-status', analise.sinal || '⚪ AGUARDANDO...');
   setVal('sinal-motivo', analise.motivo || 'Processando...');
   setVal('sinal-alvo', analise.alvo || 'N/A');
-  
-  // Exibe a Confiança e a Taxa de Acerto calculada dinamicamente
+
   const confiancaStr = analise.confianca || '0%';
   const taxaAcertoStr = analise.taxaAcerto || '0.0%';
   setVal('sinal-confianca', `Confiança: ${confiancaStr} | Win Rate: ${taxaAcertoStr}`);
 
   const statusEl = document.getElementById('sinal-status');
   if (statusEl && analise.sinal) {
-    if (analise.sinal.includes('ENTRAR') || analise.sinal.includes('FAVORÁVEL')) {
+    const s = analise.sinal.toUpperCase();
+    if (s.includes('ENTRAR') || s.includes('FAVORÁVEL') || s.includes('OPORTUNIDADE') || s.includes('CONFLUÊNCIA')) {
       statusEl.style.color = '#00ff88';
-    } else if (analise.sinal.includes('RECUAR') || analise.sinal.includes('ALERTA') || analise.sinal.includes('DEFESA') || analise.sinal.includes('CAUTELA') || analise.sinal.includes('ZONA')) {
+    } else if (s.includes('RECUAR') || s.includes('ALERTA') || s.includes('DEFESA') || s.includes('CAUTELA') || s.includes('ARMADILHA') || s.includes('EXAUSTÃO') || s.includes('POLUÍDA')) {
       statusEl.style.color = '#ff3366';
-    } else if (analise.sinal.includes('MODERADA')) {
+    } else if (s.includes('MODERADA') || s.includes('ESPERA')) {
       statusEl.style.color = '#ffcc00';
     } else {
       statusEl.style.color = '#ffffff';
@@ -134,7 +168,7 @@ function renderizarTudo() {
   renderizarVelasComCasas();
   atualizarCardsSuperiores();
   atualizarMedias();
-  renderizarDistribuição();
+  renderizarDistribuicao();
   renderizarMinutagem20Minutos();
 }
 
@@ -176,20 +210,16 @@ function renderizarVelasComCasas() {
 
     if (!temRosaNoHistorico) {
       badgeText = 0;
+    } else if (eRosaOuHot) {
+      encontrouPrimeiraRosa = true;
+      contadorCasas++;
+      badgeText = contadorCasas;
+      contadorCasas = 0;
+    } else if (encontrouPrimeiraRosa) {
+      contadorCasas++;
+      badgeText = contadorCasas;
     } else {
-      if (eRosaOuHot) {
-        encontrouPrimeiraRosa = true;
-        contadorCasas++;
-        badgeText = contadorCasas;
-        contadorCasas = 0;
-      } else {
-        if (encontrouPrimeiraRosa) {
-          contadorCasas++;
-          badgeText = contadorCasas;
-        } else {
-          badgeText = 0;
-        }
-      }
+      badgeText = 0;
     }
 
     return {
@@ -203,19 +233,18 @@ function renderizarVelasComCasas() {
   grid.innerHTML = paraExibir.map((item) => {
     const cor = getCorClass(item.mult);
 
-    // --- APLICAÇÃO DO CONTORNO DE FEEDBACK VISUAL (ACERTO / ERRO) ---
     let estiloFeedback = '';
     if (item.statusFeedback === 'acerto') {
-      estiloFeedback = 'border: 2px solid #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);'; // Verde (Acerto / Alvo Batido)
+      estiloFeedback = 'border: 2px solid #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);';
     } else if (item.statusFeedback === 'erro') {
-      estiloFeedback = 'border: 2px solid #ef4444; box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);'; // Vermelho (Erro / Quebra)
+      estiloFeedback = 'border: 2px solid #ef4444; box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);';
     }
 
     return `
       <div class="vela-item ${cor}" style="${estiloFeedback}">
         <div class="badge-casa">${item.badgeText}</div>
         <div class="mult">${item.mult.toFixed(2)}x</div>
-        <div class="time">${item.time}</div>
+        <div class="time">${item.time || ''}</div>
       </div>
     `;
   }).join('');
@@ -259,9 +288,9 @@ function atualizarCardsSuperiores() {
   setVal('tempo-1000', f1000.tempo);
 }
 
-function renderizarDistribuição() {
-  const umahoraAtras = Date.now() - (60 * 60 * 1000);
-  const velasHora = historyData.filter(i => i.timestamp && i.timestamp >= umahoraAtras);
+function renderizarDistribuicao() {
+  const umaHoraAtras = Date.now() - (60 * 60 * 1000);
+  const velasHora = historyData.filter(i => i.timestamp && i.timestamp >= umaHoraAtras);
 
   const total = velasHora.length;
   let qAzul = 0, qRoxa = 0, qRosa = 0, qHot = 0;
@@ -291,32 +320,34 @@ function renderizarDistribuição() {
   setVal('qty-hot', qHot);
 
   const ctx = document.getElementById('donutChart');
-  if (!ctx) return;
+  if (!ctx || typeof Chart === 'undefined') return;
 
-  if (donutChartInstance) {
-    donutChartInstance.destroy();
-  }
-
-  donutChartInstance = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: ['Azul', 'Roxa', 'Rosa', 'Hot'],
-      datasets: [{
-        data: [qAzul, qRoxa, qRosa, qHot],
-        backgroundColor: ['#2563eb', '#9333ea', '#e11d48', '#ff0055'],
-        borderWidth: 0
-      }]
-    },
-    options: {
-      cutout: '75%',
-      plugins: {
-        legend: { display: false },
-        tooltip: { enabled: false }
+  if (!donutChartInstance) {
+    donutChartInstance = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Azul', 'Roxa', 'Rosa', 'Hot'],
+        datasets: [{
+          data: [qAzul, qRoxa, qRosa, qHot],
+          backgroundColor: ['#2563eb', '#9333ea', '#e11d48', '#ff0055'],
+          borderWidth: 0
+        }]
       },
-      responsive: true,
-      maintainAspectRatio: false
-    }
-  });
+      options: {
+        cutout: '75%',
+        animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false }
+        },
+        responsive: true,
+        maintainAspectRatio: false
+      }
+    });
+  } else {
+    donutChartInstance.data.datasets[0].data = [qAzul, qRoxa, qRosa, qHot];
+    donutChartInstance.update('none');
+  }
 }
 
 function setVal(id, text) {
@@ -343,8 +374,10 @@ function renderizarMinutagem20Minutos() {
     if (item.time) {
       const minuto = item.time.split(':')[1];
       if (minuto) {
-        const digitoFinal = parseInt(minuto.slice(-1));
-        contagemDigitos[digitoFinal]++;
+        const digitoFinal = parseInt(minuto.slice(-1), 10);
+        if (!Number.isNaN(digitoFinal) && digitoFinal >= 0 && digitoFinal <= 9) {
+          contagemDigitos[digitoFinal]++;
+        }
       }
     }
   });
